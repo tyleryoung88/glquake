@@ -277,7 +277,7 @@ float *Fog_GetColor (void)
 
 	//find closest 24-bit RGB value, so solid-colored sky can match the fog perfectly
 	for (i=0;i<3;i++)
-		c[i] = (float)(Q_rint(c[i] * 255)) / 255.0f;
+		c[i] = (float)(rint(c[i] * 255)) / 255.0f;
 
 	for (i = 0; i < 3; i++)
 		c[i] /= 64.0;

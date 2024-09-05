@@ -14,7 +14,6 @@ GNU General Public License for more details.
 */
 
 #include "quakedef.h"
-#include <math.h>
 
 
 const matrix3x4 matrix3x4_identity =
@@ -121,11 +120,11 @@ void Matrix3x4_CreateFromEntity( matrix3x4 out, const vec3_t angles, const vec3_
 	if( angles[ROLL] )
 	{
 		angle = angles[YAW] * (M_PI*2 / 360);
-		sincos( angle, &sy, &cy );
+		SinCos( angle, &sy, &cy );
 		angle = angles[PITCH] * (M_PI*2 / 360);
-		sincos( angle, &sp, &cp );
+		SinCos( angle, &sp, &cp );
 		angle = angles[ROLL] * (M_PI*2 / 360);
-		sincos( angle, &sr, &cr );
+		SinCos( angle, &sr, &cr );
 
 		out[0][0] = (cp*cy) * scale;
 		out[0][1] = (sr*sp*cy+cr*-sy) * scale;
@@ -143,9 +142,9 @@ void Matrix3x4_CreateFromEntity( matrix3x4 out, const vec3_t angles, const vec3_
 	else if( angles[PITCH] )
 	{
 		angle = angles[YAW] * (M_PI*2 / 360);
-		sincos( angle, &sy, &cy );
+		SinCos( angle, &sy, &cy );
 		angle = angles[PITCH] * (M_PI*2 / 360);
-		sincos( angle, &sp, &cp );
+		SinCos( angle, &sp, &cp );
 
 		out[0][0] = (cp*cy) * scale;
 		out[0][1] = (-sy) * scale;
@@ -163,7 +162,7 @@ void Matrix3x4_CreateFromEntity( matrix3x4 out, const vec3_t angles, const vec3_
 	else if( angles[YAW] )
 	{
 		angle = angles[YAW] * (M_PI*2 / 360);
-		sincos( angle, &sy, &cy );
+		SinCos( angle, &sy, &cy );
 
 		out[0][0] = (cy) * scale;
 		out[0][1] = (-sy) * scale;
@@ -249,13 +248,61 @@ const matrix4x4 matrix4x4_identity =
 */
 void Matrix4x4_VectorTransform( const matrix4x4 in, const float v[3], float out[3] )
 {
+#ifdef __PSP__
+	__asm__ (
+		".set			push\n"					// save assembler option
+		".set			noreorder\n"			// suppress reordering
+		"lv.q			C100,  0 + %1\n"		// C100 = in[0]
+		"lv.q			C110, 16 + %1\n"		// C110 = in[1]
+		"lv.q			C120, 32 + %1\n"		// C120 = in[2]
+		"lv.s			S130,  0 + %2\n"		// S130 = v[0]
+		"lv.s			S131,  4 + %2\n"		// S131 = v[1]
+		"lv.s			S132,  8 + %2\n"		// S132 = v[2]
+		"vhdp.q			S000, C130, C100\n"		// S000 = v[0] * in[0][0] + v[1] * in[0][1] + v[2] * in[0][2] + in[0][3]
+		"vhdp.q			S001, C130, C110\n"		// S001 = v[0] * in[1][0] + v[1] * in[1][1] + v[2] * in[1][2] + in[1][3]
+		"vhdp.q			S002, C130, C120\n"		// S002 = v[0] * in[2][0] + v[1] * in[2][1] + v[2] * in[2][2] + in[2][3]
+		"sv.s			S000,  0 + %0\n"		// out[0] = S000
+		"sv.s			S001,  4 + %0\n"		// out[1] = S001
+		"sv.s			S002,  8 + %0\n"		// out[2] = S002
+		".set			pop\n"					// restore assembler option
+		: "=m"( *out )
+		: "m"( *in ), "m"( *v )
+	);
+#else
 	out[0] = v[0] * in[0][0] + v[1] * in[0][1] + v[2] * in[0][2] + in[0][3];
 	out[1] = v[0] * in[1][0] + v[1] * in[1][1] + v[2] * in[1][2] + in[1][3];
 	out[2] = v[0] * in[2][0] + v[1] * in[2][1] + v[2] * in[2][2] + in[2][3];
+#endif // __PSP__
 }
 
 void Matrix4x4_VectorITransform( const matrix4x4 in, const float v[3], float out[3] )
 {
+#ifdef __PSP__
+	__asm__ (
+		".set			push\n"					// save assembler option
+		".set			noreorder\n"			// suppress reordering
+		"lv.q			C100,  0 + %1\n"		// C100 = in[0]
+		"lv.q			C110, 16 + %1\n"		// C110 = in[1]
+		"lv.q			C120, 32 + %1\n"		// C120 = in[2]
+		"lv.s			S130,  0 + %2\n"		// S130 = v[0]
+		"lv.s			S131,  4 + %2\n"		// S131 = v[1]
+		"lv.s			S132,  8 + %2\n"		// S132 = v[2]
+		"vsub.t			C130, C130, R103\n"		// C130 = v - in[][3]
+		#if 1
+		"vtfm3.t		C000, E100, C130\n"		// C000 = E100 * C130
+		#else
+		"vdot.t			S000, C130, R100\n"		// S000 = dir[0] * in[0][0] + dir[1] * in[1][0] + dir[2] * in[2][0]
+		"vdot.t			S001, C130, R101\n"		// S001 = dir[0] * in[0][1] + dir[1] * in[1][1] + dir[2] * in[2][1]
+		"vdot.t			S002, C130, R102\n"		// S002 = dir[0] * in[0][2] + dir[1] * in[1][2] + dir[2] * in[2][2]
+		#endif
+		"sv.s			S000,  0 + %0\n"		// out[0] = S000
+		"sv.s			S001,  4 + %0\n"		// out[1] = S001
+		"sv.s			S002,  8 + %0\n"		// out[2] = S002
+		".set			pop\n"					// restore assembler option
+		: "=m"( *out )
+		: "m"( *in ), "m"( *v )
+	);
+#else
 	vec3_t	dir;
 
 	dir[0] = v[0] - in[0][3];
@@ -265,6 +312,7 @@ void Matrix4x4_VectorITransform( const matrix4x4 in, const float v[3], float out
 	out[0] = dir[0] * in[0][0] + dir[1] * in[1][0] + dir[2] * in[2][0];
 	out[1] = dir[0] * in[0][1] + dir[1] * in[1][1] + dir[2] * in[2][1];
 	out[2] = dir[0] * in[0][2] + dir[1] * in[1][2] + dir[2] * in[2][2];
+#endif // __PSP__
 }
 
 void Matrix4x4_VectorRotate( const matrix4x4 in, const float v[3], float out[3] )
@@ -283,6 +331,27 @@ void Matrix4x4_VectorIRotate( const matrix4x4 in, const float v[3], float out[3]
 
 void Matrix4x4_ConcatTransforms( matrix4x4 out, const matrix4x4 in1, const matrix4x4 in2 )
 {
+#ifdef __PSP__
+	__asm__ (
+		".set			push\n"					// save assembler option
+		".set			noreorder\n"			// suppress reordering
+		"lv.q			C100,  0 + %1\n"		// C100 = in1[0]
+		"lv.q			C110, 16 + %1\n"		// C110 = in1[1]
+		"lv.q			C120, 32 + %1\n"		// C120 = in1[2]
+		"vzero.q		C130\n"					// C130 = [0, 0, 0, 0]
+		"lv.q			C200,  0 + %2\n"		// C100 = in2[0]
+		"lv.q			C210, 16 + %2\n"		// C110 = in2[1]
+		"lv.q			C220, 32 + %2\n"		// C120 = in2[2]
+		"vidt.q			C230\n"					// C230 = [0, 0, 0, 1]
+		"vmmul.q		E000, E100, E200\n"		// E000 = E100 * E200
+		"sv.q			C000,  0 + %0\n"		// out[0] = C000
+		"sv.q			C010, 16 + %0\n"		// out[1] = C010
+		"sv.q			C020, 32 + %0\n"		// out[2] = C020
+		".set			pop\n"					// restore assembler option
+		: "=m"( *out )
+		: "m"( *in1 ), "m"( *in2 )
+	);
+#else
 	out[0][0] = in1[0][0] * in2[0][0] + in1[0][1] * in2[1][0] + in1[0][2] * in2[2][0];
 	out[0][1] = in1[0][0] * in2[0][1] + in1[0][1] * in2[1][1] + in1[0][2] * in2[2][1];
 	out[0][2] = in1[0][0] * in2[0][2] + in1[0][1] * in2[1][2] + in1[0][2] * in2[2][2];
@@ -295,6 +364,7 @@ void Matrix4x4_ConcatTransforms( matrix4x4 out, const matrix4x4 in1, const matri
 	out[2][1] = in1[2][0] * in2[0][1] + in1[2][1] * in2[1][1] + in1[2][2] * in2[2][1];
 	out[2][2] = in1[2][0] * in2[0][2] + in1[2][1] * in2[1][2] + in1[2][2] * in2[2][2];
 	out[2][3] = in1[2][0] * in2[0][3] + in1[2][1] * in2[1][3] + in1[2][2] * in2[2][3] + in1[2][3];
+#endif // __PSP__
 }
 
 void Matrix4x4_SetOrigin( matrix4x4 out, float x, float y, float z )
@@ -338,11 +408,11 @@ void Matrix4x4_CreateFromEntity( matrix4x4 out, const vec3_t angles, const vec3_
 	if( angles[ROLL] )
 	{
 		angle = angles[YAW] * (M_PI*2 / 360);
-		sincos( angle, &sy, &cy );
+		SinCos( angle, &sy, &cy );
 		angle = angles[PITCH] * (M_PI*2 / 360);
-		sincos( angle, &sp, &cp );
+		SinCos( angle, &sp, &cp );
 		angle = angles[ROLL] * (M_PI*2 / 360);
-		sincos( angle, &sr, &cr );
+		SinCos( angle, &sr, &cr );
 
 		out[0][0] = (cp*cy) * scale;
 		out[0][1] = (sr*sp*cy+cr*-sy) * scale;
@@ -364,9 +434,9 @@ void Matrix4x4_CreateFromEntity( matrix4x4 out, const vec3_t angles, const vec3_
 	else if( angles[PITCH] )
 	{
 		angle = angles[YAW] * (M_PI*2 / 360);
-		sincos( angle, &sy, &cy );
+		SinCos( angle, &sy, &cy );
 		angle = angles[PITCH] * (M_PI*2 / 360);
-		sincos( angle, &sp, &cp );
+		SinCos( angle, &sp, &cp );
 
 		out[0][0] = (cp*cy) * scale;
 		out[0][1] = (-sy) * scale;
@@ -388,7 +458,7 @@ void Matrix4x4_CreateFromEntity( matrix4x4 out, const vec3_t angles, const vec3_
 	else if( angles[YAW] )
 	{
 		angle = angles[YAW] * (M_PI*2 / 360);
-		sincos( angle, &sy, &cy );
+		SinCos( angle, &sy, &cy );
 
 		out[0][0] = (cy) * scale;
 		out[0][1] = (-sy) * scale;
@@ -453,6 +523,34 @@ void Matrix4x4_ConvertToEntity( const matrix4x4 in, vec3_t angles, vec3_t origin
 
 void Matrix4x4_TransformPositivePlane( const matrix4x4 in, const vec3_t normal, float d, vec3_t out, float *dist )
 {
+#ifdef __PSP__
+	__asm__ (
+		".set			push\n"					// save assembler option
+		".set			noreorder\n"			// suppress reordering
+		"lv.q			C100,  0 + %2\n"		// C100 = in[0]
+		"lv.q			C110, 16 + %2\n"		// C110 = in[1]
+		"lv.q			C120, 32 + %2\n"		// C120 = in[2]
+		"lv.s			S200,  0 + %3\n"		// S200 = normal[0]
+		"lv.s			S201,  4 + %3\n"		// S201 = normal[1]
+		"lv.s			S202,  8 + %3\n"		// S202 = normal[2]
+		"lv.s			S210, %4\n"				// S210 = d
+		"vdot.t			S211, C100, C100\n"		// S211 = C100 * C100
+		"vsqrt.s		S211, S211\n"			// S211 = sqrt( S211 )
+		"vrcp.s			S212, S211\n"			// S212 = 1 / S211
+		"vtfm3.t		C000, M100, C200\n"		// C000 = M100 * C200
+		"vscl.t			C000, C000, S212\n"		// C000 = C000 * S211
+		"vmul.s			S003, S210, S211\n"		// S003 = S210 * S211
+		"vdot.t			S010, R103,	C000\n"		// S010 = R103 * C000
+		"vadd.s			S003, S003, S010\n"		// S003 = S003 + S010
+		"sv.s			S000,  0 + %0\n"		// out[0] = S000
+		"sv.s			S001,  4 + %0\n"		// out[1] = S001
+		"sv.s			S002,  8 + %0\n"		// out[2] = S002
+		"sv.s			S003, %1\n"				// dist = S003
+		".set			pop\n"					// restore assembler option
+		: "=m"( *out ), "=m"( *dist )
+		: "m"( *in ), "m"( *normal ), "m"( d )
+	);
+#else
 	float	scale = sqrt( in[0][0] * in[0][0] + in[0][1] * in[0][1] + in[0][2] * in[0][2] );
 	float	iscale = 1.0f / scale;
 
@@ -460,10 +558,39 @@ void Matrix4x4_TransformPositivePlane( const matrix4x4 in, const vec3_t normal, 
 	out[1] = (normal[0] * in[1][0] + normal[1] * in[1][1] + normal[2] * in[1][2]) * iscale;
 	out[2] = (normal[0] * in[2][0] + normal[1] * in[2][1] + normal[2] * in[2][2]) * iscale;
 	*dist = d * scale + ( out[0] * in[0][3] + out[1] * in[1][3] + out[2] * in[2][3] );
+#endif // __PSP__
 }
 
 void Matrix4x4_TransformStandardPlane( const matrix4x4 in, const vec3_t normal, float d, vec3_t out, float *dist )
 {
+#ifdef __PSP__
+	__asm__ (
+		".set			push\n"					// save assembler option
+		".set			noreorder\n"			// suppress reordering
+		"lv.q			C100,  0 + %2\n"		// C100 = in[0]
+		"lv.q			C110, 16 + %2\n"		// C110 = in[1]
+		"lv.q			C120, 32 + %2\n"		// C120 = in[2]
+		"lv.s			S200,  0 + %3\n"		// S200 = normal[0]
+		"lv.s			S201,  4 + %3\n"		// S201 = normal[1]
+		"lv.s			S202,  8 + %3\n"		// S202 = normal[2]
+		"lv.s			S210, %4\n"				// S210 = d
+		"vdot.t			S211, C100, C100\n"		// S211 = C100 * C100
+		"vsqrt.s		S211, S211\n"			// S211 = sqrt( S211 )
+		"vrcp.s			S212, S211\n"			// S212 = 1 / S211
+		"vtfm3.t		C000, M100, C200\n"		// C000 = M100 * C200
+		"vscl.t			C000, C000, S212\n"		// C000 = C000 * S211
+		"vmul.s			S003, S210, S211\n"		// S003 = S210 * S211
+		"vdot.t			S010, R103,	C000\n"		// S010 = R103 * C000
+		"vsub.s			S003, S003, S010\n"		// S003 = S003 - S010
+		"sv.s			S000,  0 + %0\n"		// out[0] = S000
+		"sv.s			S001,  4 + %0\n"		// out[1] = S001
+		"sv.s			S002,  8 + %0\n"		// out[2] = S002
+		"sv.s			S003, %1\n"				// dist = S003
+		".set			pop\n"					// restore assembler option
+		: "=m"( *out ), "=m"( *dist )
+		: "m"( *in ), "m"( *normal ), "m"( d )
+	);
+#else
 	float scale = sqrt( in[0][0] * in[0][0] + in[0][1] * in[0][1] + in[0][2] * in[0][2] );
 	float iscale = 1.0f / scale;
 
@@ -471,6 +598,7 @@ void Matrix4x4_TransformStandardPlane( const matrix4x4 in, const vec3_t normal, 
 	out[1] = (normal[0] * in[1][0] + normal[1] * in[1][1] + normal[2] * in[1][2]) * iscale;
 	out[2] = (normal[0] * in[2][0] + normal[1] * in[2][1] + normal[2] * in[2][2]) * iscale;
 	*dist = d * scale - ( out[0] * in[0][3] + out[1] * in[1][3] + out[2] * in[2][3] );
+#endif // __PSP__
 }
 
 void Matrix4x4_Invert_Simple( matrix4x4 out, const matrix4x4 in1 )

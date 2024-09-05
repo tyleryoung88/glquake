@@ -424,8 +424,8 @@ void Cvar_SetQuick (cvar_t *var, const char *value)
 	}
 	//johnfitz
 
-	if (var->callback)
-		var->callback (var);
+	//if (var->callback)
+	//	var->callback (var);
 }
 
 void Cvar_SetValueQuick (cvar_t *var, const float value)
@@ -433,10 +433,10 @@ void Cvar_SetValueQuick (cvar_t *var, const float value)
 	char	val[32], *ptr = val;
 
 	if (value == (float)((int)value))
-		q_snprintf (val, sizeof(val), "%i", (int)value);
+		snprintf (val, sizeof(val), "%i", (int)value);
 	else
 	{
-		q_snprintf (val, sizeof(val), "%f", value);
+		snprintf (val, sizeof(val), "%f", value);
 		// kill trailing zeroes
 		while (*ptr)
 			ptr++;
@@ -476,10 +476,10 @@ void Cvar_SetValue (const char *var_name, const float value)
 	char	val[32], *ptr = val;
 
 	if (value == (float)((int)value))
-		q_snprintf (val, sizeof(val), "%i", (int)value);
+		snprintf (val, sizeof(val), "%i", (int)value);
 	else
 	{
-		q_snprintf (val, sizeof(val), "%f", value);
+		snprintf (val, sizeof(val), "%f", value);
 		// kill trailing zeroes
 		while (*ptr)
 			ptr++;
@@ -573,7 +573,7 @@ void Cvar_RegisterVariable (cvar_t *variable)
 	variable->flags |= CVAR_REGISTERED;
 
 // copy the value off, because future sets will Z_Free it
-	q_strlcpy (value, variable->string, sizeof(value));
+	strlcpy (value, variable->string, sizeof(value));
 	variable->string = NULL;
 	variable->default_string = NULL;
 

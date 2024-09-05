@@ -1173,7 +1173,7 @@ void CL_ParseServerMessage (void)
 				for (j=0; j<cl_lightstyle[i].length; j++)
 				{
 					total += cl_lightstyle[i].map[j] - 'a';
-					cl_lightstyle[i].peak = max(cl_lightstyle[i].peak, cl_lightstyle[i].map[j]);
+					cl_lightstyle[i].peak = fmax(cl_lightstyle[i].peak, cl_lightstyle[i].map[j]);
 				}
 				cl_lightstyle[i].average = total / cl_lightstyle[i].length + 'a';
 			}
@@ -1197,14 +1197,6 @@ void CL_ParseServerMessage (void)
 			if (i >= cl.maxclients)
 				Host_Error ("CL_ParseServerMessage: svc_updatename > MAX_SCOREBOARD");
 			strcpy (cl.scores[i].name, MSG_ReadString ());
-			break;
-
-		case svc_updatecolors:
-			Sbar_Changed ();
-			i = MSG_ReadByte ();
-			if (i >= cl.maxclients)
-				Host_Error ("CL_ParseServerMessage: svc_updatecolors > MAX_SCOREBOARD");
-			MSG_ReadByte ();
 			break;
 			
 		case svc_particle:

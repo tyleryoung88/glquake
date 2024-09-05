@@ -77,6 +77,7 @@ COMMON_OBJS =	chase.c \
 				host_cmd.c \
 				keys.c \
 				mathlib.c \
+				matrixlib.c \
 				menu.c \
 				net_dgrm.c \
 				net_udpctr.c \
