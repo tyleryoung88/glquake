@@ -210,6 +210,13 @@ void *Z_TagMalloc (int size, int tag)
 	return (void *) ((byte *)base + sizeof(memblock_t));
 }
 
+char *Z_Strdup (const char *s)
+{
+	size_t sz = strlen(s) + 1;
+	char *ptr = (char *) Z_Malloc (sz);
+	memcpy (ptr, s, sz);
+	return ptr;
+}
 
 /*
 ========================

@@ -92,6 +92,7 @@ void *Z_TagMalloc (int size, int tag);
 void Z_DumpHeap (void);
 void Z_CheckHeap (void);
 int Z_FreeMemory (void);
+char *Z_Strdup (const char *s);
 
 void *Hunk_Alloc (int size);		// returns 0 filled memory
 void *Hunk_AllocName (int size, char *name);
