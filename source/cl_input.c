@@ -510,7 +510,7 @@ void CL_SendMove (usercmd_t *cmd)
 	int		bits;
 	sizebuf_t	buf;
 	byte	data[128];
-	
+	vec3_t tempv;
 	buf.maxsize = 128;
 	buf.cursize = 0;
 	buf.data = data;
@@ -559,9 +559,10 @@ void CL_SendMove (usercmd_t *cmd)
 
 	MSG_WriteFloat (&buf, cl.mtime[0]);	// so server can get ping times
 
+	VectorAdd(cl.gun_kick, cl.viewangles, tempv);
 	for (i=0 ; i<3 ; i++)
-		MSG_WriteAngle (&buf, cl.viewangles[i]);
-	
+		MSG_WriteFloat (&buf, tempv[i]);
+
     MSG_WriteShort (&buf, cmd->forwardmove);
     MSG_WriteShort (&buf, cmd->sidemove);
     MSG_WriteShort (&buf, cmd->upmove);
@@ -608,13 +609,6 @@ void CL_SendMove (usercmd_t *cmd)
     MSG_WriteByte (&buf, in_impulse);
 	in_impulse = 0;
 
-#ifdef QUAKE2
-//
-// light level
-//
-	MSG_WriteByte (&buf, cmd->lightlevel);
-#endif
-
 //
 // deliver the message
 //
@@ -627,7 +621,7 @@ void CL_SendMove (usercmd_t *cmd)
 //
 	if (++cl.movemessages <= 2)
 		return;
-	
+
 	if (NET_SendUnreliableMessage (cls.netcon, &buf) == -1)
 	{
 		Con_Printf ("CL_SendMove: lost server connection\n");

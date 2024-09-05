@@ -638,3 +638,127 @@ fixed16_t Invert24To16(fixed16_t val)
 }
 
 #endif
+
+/*
+========================================================================
+
+		Matrix4x4 operations
+
+========================================================================
+*/
+void Matrix4x4_VectorTransform( const matrix4x4 in, const float v[3], float out[3] )
+{
+	out[0] = v[0] * in[0][0] + v[1] * in[0][1] + v[2] * in[0][2] + in[0][3];
+	out[1] = v[0] * in[1][0] + v[1] * in[1][1] + v[2] * in[1][2] + in[1][3];
+	out[2] = v[0] * in[2][0] + v[1] * in[2][1] + v[2] * in[2][2] + in[2][3];
+}
+
+void Matrix4x4_VectorITransform( const matrix4x4 in, const float v[3], float out[3] )
+{
+	vec3_t	dir;
+
+	dir[0] = v[0] - in[0][3];
+	dir[1] = v[1] - in[1][3];
+	dir[2] = v[2] - in[2][3];
+
+	out[0] = dir[0] * in[0][0] + dir[1] * in[1][0] + dir[2] * in[2][0];
+	out[1] = dir[0] * in[0][1] + dir[1] * in[1][1] + dir[2] * in[2][1];
+	out[2] = dir[0] * in[0][2] + dir[1] * in[1][2] + dir[2] * in[2][2];
+}
+
+void Matrix4x4_CreateFromEntity( matrix4x4 out, const vec3_t angles, const vec3_t origin, float scale )
+{
+	float	angle, sr, sp, sy, cr, cp, cy;
+
+	if( angles[ROLL] )
+	{
+		angle = angles[YAW] * (M_PI*2 / 360);
+		sincos( angle, &sy, &cy );
+		angle = angles[PITCH] * (M_PI*2 / 360);
+		sincos( angle, &sp, &cp );
+		angle = angles[ROLL] * (M_PI*2 / 360);
+		sincos( angle, &sr, &cr );
+
+		out[0][0] = (cp*cy) * scale;
+		out[0][1] = (sr*sp*cy+cr*-sy) * scale;
+		out[0][2] = (cr*sp*cy+-sr*-sy) * scale;
+		out[0][3] = origin[0];
+		out[1][0] = (cp*sy) * scale;
+		out[1][1] = (sr*sp*sy+cr*cy) * scale;
+		out[1][2] = (cr*sp*sy+-sr*cy) * scale;
+		out[1][3] = origin[1];
+		out[2][0] = (-sp) * scale;
+		out[2][1] = (sr*cp) * scale;
+		out[2][2] = (cr*cp) * scale;
+		out[2][3] = origin[2];
+		out[3][0] = 0;
+		out[3][1] = 0;
+		out[3][2] = 0;
+		out[3][3] = 1;
+	}
+	else if( angles[PITCH] )
+	{
+		angle = angles[YAW] * (M_PI*2 / 360);
+		sincos( angle, &sy, &cy );
+		angle = angles[PITCH] * (M_PI*2 / 360);
+		sincos( angle, &sp, &cp );
+
+		out[0][0] = (cp*cy) * scale;
+		out[0][1] = (-sy) * scale;
+		out[0][2] = (sp*cy) * scale;
+		out[0][3] = origin[0];
+		out[1][0] = (cp*sy) * scale;
+		out[1][1] = (cy) * scale;
+		out[1][2] = (sp*sy) * scale;
+		out[1][3] = origin[1];
+		out[2][0] = (-sp) * scale;
+		out[2][1] = 0;
+		out[2][2] = (cp) * scale;
+		out[2][3] = origin[2];
+		out[3][0] = 0;
+		out[3][1] = 0;
+		out[3][2] = 0;
+		out[3][3] = 1;
+	}
+	else if( angles[YAW] )
+	{
+		angle = angles[YAW] * (M_PI*2 / 360);
+		sincos( angle, &sy, &cy );
+
+		out[0][0] = (cy) * scale;
+		out[0][1] = (-sy) * scale;
+		out[0][2] = 0;
+		out[0][3] = origin[0];
+		out[1][0] = (sy) * scale;
+		out[1][1] = (cy) * scale;
+		out[1][2] = 0;
+		out[1][3] = origin[1];
+		out[2][0] = 0;
+		out[2][1] = 0;
+		out[2][2] = scale;
+		out[2][3] = origin[2];
+		out[3][0] = 0;
+		out[3][1] = 0;
+		out[3][2] = 0;
+		out[3][3] = 1;
+	}
+	else
+	{
+		out[0][0] = scale;
+		out[0][1] = 0;
+		out[0][2] = 0;
+		out[0][3] = origin[0];
+		out[1][0] = 0;
+		out[1][1] = scale;
+		out[1][2] = 0;
+		out[1][3] = origin[1];
+		out[2][0] = 0;
+		out[2][1] = 0;
+		out[2][2] = scale;
+		out[2][3] = origin[2];
+		out[3][0] = 0;
+		out[3][1] = 0;
+		out[3][2] = 0;
+		out[3][3] = 1;
+	}
+}

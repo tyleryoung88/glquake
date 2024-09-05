@@ -23,6 +23,7 @@ typedef float vec_t;
 typedef vec_t vec3_t[3];
 typedef vec_t vec5_t[5];
 typedef vec_t vec2_t[2];
+typedef vec_t matrix4x4[4][4];
 
 typedef	int	fixed4_t;
 typedef	int	fixed8_t;
@@ -96,6 +97,10 @@ int GreatestCommonDivisor (int i1, int i2);
 void AngleVectors (vec3_t angles, vec3_t forward, vec3_t right, vec3_t up);
 int BoxOnPlaneSide (vec3_t emins, vec3_t emaxs, struct mplane_s *plane);
 float	anglemod(float a);
+
+void Matrix4x4_CreateFromEntity( matrix4x4 out, const vec3_t angles, const vec3_t origin, float scale );
+void Matrix4x4_VectorTransform( const matrix4x4 in, const float v[3], float out[3] );
+void Matrix4x4_VectorITransform( const matrix4x4 in, const float v[3], float out[3] );
 
 extern int _mathlib_temp_int1, _mathlib_temp_int2, _mathlib_temp_int3;
 extern float _mathlib_temp_float1, _mathlib_temp_float2, _mathlib_temp_float3;
