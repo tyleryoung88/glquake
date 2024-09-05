@@ -467,24 +467,10 @@ if (bits&(1<<i))
 			Sys_Error ("i >= cl.maxclients");
 	}
 
-#ifdef GLQUAKE
-	if (bits & U_SKIN)
-		skin = MSG_ReadByte();
-	else
-		skin = ent->baseline.skin;
-	if (skin != ent->skinnum) {
-		ent->skinnum = skin;
-		if (num > 0 && num <= cl.maxclients)
-			R_TranslatePlayerSkin (num - 1);
-	}
-
-#else
-
 	if (bits & U_SKIN)
 		ent->skinnum = MSG_ReadByte();
 	else
 		ent->skinnum = ent->baseline.skin;
-#endif
 
 	if (bits & U_EFFECTS)
 		ent->effects = MSG_ReadShort();

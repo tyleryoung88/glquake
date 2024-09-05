@@ -1282,6 +1282,8 @@ void Host_Spawn_f (void)
 		return;
 	}
 
+	host_client->nomap = false;
+
 // run the entrance script
 	if (sv.loadgame)
 	{	// loaded games are fully inited allready

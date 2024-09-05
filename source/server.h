@@ -109,7 +109,8 @@ typedef struct client_s
 	
 	int				old_points;
 	int 			old_kills;
-	
+// joe, from ProQuake: allow clients to connect if they don't have the map
+	qboolean	nomap;
 } client_t;
 
 
