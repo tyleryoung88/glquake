@@ -77,6 +77,10 @@ typedef enum
 
 extern	cmd_source_t	cmd_source;
 
+#define	MAX_FILELENGTH	64
+
+#define	MAXCMDLINE		256
+
 void	Cmd_Init (void);
 
 void	Cmd_AddCommand (char *cmd_name, xcommand_t function);

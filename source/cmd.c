@@ -87,7 +87,7 @@ void Cbuf_AddText (char *text)
 {
 	int		l;
 	
-	l = Q_strlen (text);
+	l = strlen (text);
 
 	if (cmd_text.cursize + l >= cmd_text.maxsize)
 	{
@@ -95,7 +95,7 @@ void Cbuf_AddText (char *text)
 		return;
 	}
 
-	SZ_Write (&cmd_text, text, Q_strlen (text));
+	SZ_Write (&cmd_text, text, strlen (text));
 }
 
 
@@ -163,8 +163,12 @@ void Cbuf_Execute (void)
 				break;
 		}
 			
-				
-		memcpy (line, text, i);
+#ifdef PSP_VFPU
+		memcpy_vfpu(line, text, i);
+#else
+		memcpy(line, text, i);
+#endif // PSP_VFPU
+
 		line[i] = 0;
 		
 // delete the text from the command buffer and move remaining commands down
@@ -392,6 +396,79 @@ void Cmd_Alias_f (void)
 	a->value = CopyString (cmd);
 }
 
+#ifdef __PSP__
+/*
+===============
+Cmd_Maps_f
+
+Listing maps by Crow_bar(c).
+===============
+*/
+#include <pspiofilemgr.h>
+void Cmd_Maps_f (void)
+{
+    char		*s;
+
+	if (Cmd_Argc() < 2)
+	{
+		Con_Printf("Usage: maps <substring>\n");
+		Con_Printf("maps * for full listing\n");
+	   return;
+	}
+
+	Con_Printf("-------------\n");
+
+	s = Cmd_Argv(1);
+
+	SceUID dir = sceIoDopen(va("%s/maps", com_gamedir));
+
+	if(dir < 0)
+	{
+		return;
+	}
+
+	SceIoDirent dirent;
+
+	memset(&dirent, 0, sizeof(SceIoDirent));
+
+	while(sceIoDread(dir, &dirent) > 0)
+	{
+		  if(dirent.d_name[0] == '.')
+		  {
+			  continue;
+		  }
+
+		  if(!strcasecmp(COM_FileExtension (dirent.d_name),"bsp"))
+		  {
+		      if(s[0] == '*')
+		      {
+		         Con_Printf("%s\n",dirent.d_name);
+	          }
+			  else
+		      {
+				    int i = 0;
+					while(1)
+			        {
+						if(s[i] == 0)
+					    {
+					 	    Con_Printf("%s\n",dirent.d_name);
+							break;
+			            }
+						if(dirent.d_name[i] != s[i])
+					    {
+							break;
+						}
+						i++;
+					}
+		      }
+		  }
+		  memset(&dirent, 0, sizeof(SceIoDirent));
+	}
+    sceIoDclose(dir);
+
+}
+#endif // __PSP__
+
 /*
 =============================================================================
 
@@ -420,6 +497,50 @@ cmd_source_t	cmd_source;
 
 static	cmd_function_t	*cmd_functions;		// possible commands to execute
 
+// 2000-01-09 CmdList command by Maddes  start
+/*
+========
+Cmd_List
+========
+*/
+void Cmd_List_f (void)
+{
+	cmd_function_t	*cmd;
+	char 		*partial;
+	int		len;
+	int		count;
+
+	if (Cmd_Argc() > 1)
+	{
+		partial = Cmd_Argv (1);
+		len = strlen(partial);
+	}
+	else
+	{
+		partial = NULL;
+		len = 0;
+	}
+
+	count=0;
+	for (cmd=cmd_functions ; cmd ; cmd=cmd->next)
+	{
+		if (partial && strncmp (partial,cmd->name, len))
+		{
+			continue;
+		}
+		Con_Printf ("\"%s\"\n", cmd->name);
+		count++;
+	}
+
+	Con_Printf ("%i command(s)", count);
+	if (partial)
+	{
+		Con_Printf (" beginning with \"%s\"", partial);
+	}
+	Con_Printf ("\n");
+}
+// 2000-01-09 CmdList command by Maddes  end
+
 /*
 ============
 Cmd_Init
@@ -430,12 +551,20 @@ void Cmd_Init (void)
 //
 // register our commands
 //
+    Cmd_AddCommand ("cmdlist", Cmd_List_f);	// 2000-01-09 CmdList command by Maddes
 	Cmd_AddCommand ("stuffcmds",Cmd_StuffCmds_f);
 	Cmd_AddCommand ("exec",Cmd_Exec_f);
 	Cmd_AddCommand ("echo",Cmd_Echo_f);
 	Cmd_AddCommand ("alias",Cmd_Alias_f);
 	Cmd_AddCommand ("cmd", Cmd_ForwardToServer);
 	Cmd_AddCommand ("wait", Cmd_Wait_f);
+
+#ifdef __PSP__
+
+	Cmd_AddCommand ("maps", Cmd_Maps_f); //Crow_bar
+
+#endif // __PSP__
+
 }
 
 /*
@@ -590,7 +719,7 @@ char *Cmd_CompleteCommand (char *partial)
 	cmd_function_t	*cmd;
 	int				len;
 	
-	len = Q_strlen(partial);
+	len = strlen(partial);
 	
 	if (!len)
 		return NULL;
@@ -602,6 +731,8 @@ char *Cmd_CompleteCommand (char *partial)
 
 	return NULL;
 }
+
+//===================================================================
 
 /*
 ============
@@ -626,7 +757,7 @@ void	Cmd_ExecuteString (char *text, cmd_source_t src)
 // check functions
 	for (cmd=cmd_functions ; cmd ; cmd=cmd->next)
 	{
-		if (!Q_strcasecmp (cmd_argv[0],cmd->name))
+		if (!strcasecmp (cmd_argv[0],cmd->name))
 		{
 			cmd->function ();
 			return;
@@ -636,7 +767,7 @@ void	Cmd_ExecuteString (char *text, cmd_source_t src)
 // check alias
 	for (a=cmd_alias ; a ; a=a->next)
 	{
-		if (!Q_strcasecmp (cmd_argv[0], a->name))
+		if (!strcasecmp (cmd_argv[0], a->name))
 		{
 			Cbuf_InsertText (a->value);
 			return;
@@ -645,7 +776,7 @@ void	Cmd_ExecuteString (char *text, cmd_source_t src)
 	
 // check cvars
 	if (!Cvar_Command ())
-		Con_Printf ("Unknown command \"%s\"\n", Cmd_Argv(0));
+		Con_Printf ("Command \"%s\" not found, check QC...\n", Cmd_Argv(0));
 	
 }
 
@@ -669,7 +800,7 @@ void Cmd_ForwardToServer (void)
 		return;		// not really connected
 
 	MSG_WriteByte (&cls.message, clc_stringcmd);
-	if (Q_strcasecmp(Cmd_Argv(0), "cmd") != 0)
+	if (strcasecmp(Cmd_Argv(0), "cmd") != 0)
 	{
 		SZ_Print (&cls.message, Cmd_Argv(0));
 		SZ_Print (&cls.message, " ");
@@ -698,7 +829,7 @@ int Cmd_CheckParm (char *parm)
 		Sys_Error ("Cmd_CheckParm: NULL");
 
 	for (i = 1; i < Cmd_Argc (); i++)
-		if (! Q_strcasecmp (parm, Cmd_Argv (i)))
+		if (! strcasecmp (parm, Cmd_Argv (i)))
 			return i;
 			
 	return 0;
