@@ -47,9 +47,9 @@ void CL_StopPlayback (void)
 	if (!cls.demoplayback)
 		return;
 
-	fclose (cls.demofile);
+	Sys_FileClose(cls.demofile);
 	cls.demoplayback = false;
-	cls.demofile = NULL;
+	cls.demofile = -1;
 	cls.state = ca_disconnected;
 
 	if (cls.timedemo)
@@ -70,14 +70,13 @@ void CL_WriteDemoMessage (void)
 	float	f;
 
 	len = LittleLong (net_message.cursize);
-	fwrite (&len, 4, 1, cls.demofile);
+	Sys_FileWrite(cls.demofile, &len, 4);
 	for (i=0 ; i<3 ; i++)
 	{
 		f = LittleFloat (cl.viewangles[i]);
-		fwrite (&f, 4, 1, cls.demofile);
+		Sys_FileWrite(cls.demofile, &f, 4);
 	}
-	fwrite (net_message.data, net_message.cursize, 1, cls.demofile);
-	fflush (cls.demofile);
+	Sys_FileWrite(cls.demofile, net_message.data, net_message.cursize);
 }
 
 /*
@@ -114,18 +113,18 @@ int CL_GetMessage (void)
 		}
 		
 	// get the next message
-		fread (&net_message.cursize, 4, 1, cls.demofile);
+		Sys_FileRead(cls.demofile, &net_message.cursize, 4);
 		VectorCopy (cl.mviewangles[0], cl.mviewangles[1]);
 		for (i=0 ; i<3 ; i++)
 		{
-			r = fread (&f, 4, 1, cls.demofile);
+			r = Sys_FileRead(cls.demofile, &f, 4) / 4;
 			cl.mviewangles[0][i] = LittleFloat (f);
 		}
 		
 		net_message.cursize = LittleLong (net_message.cursize);
 		if (net_message.cursize > MAX_MSGLEN)
-			Sys_Error ("Demo message > MAX_MSGLEN");
-		r = fread (net_message.data, net_message.cursize, 1, cls.demofile);
+			Sys_Error ("Demo message (0x%08x) > MAX_MSGLEN (%d)", net_message.cursize, MAX_MSGLEN);
+		r = Sys_FileRead(cls.demofile, net_message.data, net_message.cursize) / net_message.cursize;
 		if (r != 1)
 		{
 			CL_StopPlayback ();
@@ -180,8 +179,8 @@ void CL_Stop_f (void)
 	CL_WriteDemoMessage ();
 
 // finish up
-	fclose (cls.demofile);
-	cls.demofile = NULL;
+	Sys_FileClose(cls.demofile);
+	cls.demofile = -1;
 	cls.demorecording = false;
 	Con_Printf ("Completed demo\n");
 }
@@ -198,6 +197,7 @@ void CL_Record_f (void)
 	int		c;
 	char	name[MAX_OSPATH];
 	int		track;
+	char	forcetrack[16];
 
 	if (cmd_source != src_command)
 		return;
@@ -244,15 +244,16 @@ void CL_Record_f (void)
 	COM_DefaultExtension (name, ".dem");
 
 	Con_Printf ("recording to %s.\n", name);
-	cls.demofile = fopen (name, "wb");
-	if (!cls.demofile)
+	cls.demofile = Sys_FileOpenWrite(name);
+	if (cls.demofile < 0)
 	{
-		Con_Printf ("ERROR: couldn't open.\n");
+		Con_Printf ("ERROR: couldn't open demo for writing.\n");
 		return;
 	}
 
 	cls.forcetrack = track;
-	fprintf (cls.demofile, "%i\n", cls.forcetrack);
+	sprintf(forcetrack, "%i\n", cls.forcetrack);
+	Sys_FileWrite(cls.demofile, forcetrack, strlen(forcetrack));
 	
 	cls.demorecording = true;
 }
@@ -265,6 +266,18 @@ CL_PlayDemo_f
 play [demoname]
 ====================
 */
+static int CL_FileGetChar(int handle)
+{
+	char c;
+
+	if (Sys_FileRead(handle, &c, 1) != 1)
+	{
+		return EOF;
+	}
+
+	return c;
+}
+
 void CL_PlayDemo_f (void)
 {
 	char	name[256];
@@ -293,9 +306,9 @@ void CL_PlayDemo_f (void)
 
 	Con_Printf ("Playing demo from %s.\n", name);
 	COM_FOpenFile (name, &cls.demofile);
-	if (!cls.demofile)
+	if (cls.demofile < 0)
 	{
-		Con_Printf ("ERROR: couldn't open.\n");
+		Con_Printf ("ERROR: couldn't open demo for reading.\n");
 		cls.demonum = -1;		// stop demo loop
 		return;
 	}
@@ -304,7 +317,7 @@ void CL_PlayDemo_f (void)
 	cls.state = ca_connected;
 	cls.forcetrack = 0;
 
-	while ((c = getc(cls.demofile)) != '\n')
+	while ((c = CL_FileGetChar(cls.demofile)) != '\n')
 		if (c == '-')
 			neg = true;
 		else
@@ -325,14 +338,14 @@ CL_FinishTimeDemo
 void CL_FinishTimeDemo (void)
 {
 	int		frames;
-	float	time;
+	double	time;
 	
-	cls.timedemo = false;
+	cls.timedemo = false; 
 	
 // the first frame didn't count
 	frames = (host_framecount - cls.td_startframe) - 1;
 	time = realtime - cls.td_starttime;
-	if (!time)
+	if (time < 1)
 		time = 1;
 	Con_Printf ("%i frames %5.1f seconds %5.1f fps\n", frames, time, frames/time);
 }
