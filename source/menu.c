@@ -20,10 +20,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "quakedef.h"
 #include <sys/dirent.h>
 
-#ifdef _WIN32
-#include "winquake.h"
-#endif
-
 extern cvar_t	r_wateralpha;
 extern cvar_t	r_vsync;
 extern cvar_t	in_disable_analog;
