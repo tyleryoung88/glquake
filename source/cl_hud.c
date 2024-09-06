@@ -21,6 +21,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "quakedef.h"
 
+#ifdef __PSP__
+#include <pspgu.h>
+#include <pspmath.h>
+#endif // __PSP__
+
 qpic_t		*sb_round[5];
 qpic_t		*sb_round_num[10];
 qpic_t		*sb_moneyback;
@@ -38,19 +43,32 @@ qpic_t 		*mulepic;
 qpic_t		*fragpic;
 qpic_t		*bettypic;
 
-
+#ifdef __PSP__
+qpic_t 		*b_circle;
+qpic_t 		*b_square;
+qpic_t 		*b_cross;
+qpic_t 		*b_triangle;
+#elif _3DS
 qpic_t 		*b_abutton;
 qpic_t 		*b_bbutton;
 qpic_t 		*b_xbutton;
 qpic_t 		*b_ybutton;
+#endif // __PSP__
+
 qpic_t 		*b_left;
 qpic_t 		*b_right;
 qpic_t 		*b_up;
 qpic_t 		*b_down;
 qpic_t 		*b_lt;
 qpic_t 		*b_rt;
+
+#ifdef __PSP__
+qpic_t 		*b_home;
+#elif _3DS
 qpic_t 		*b_zlt;
 qpic_t 		*b_zrt;
+#endif // __PSP__, _3DS
+
 qpic_t 		*b_start;
 qpic_t 		*b_select;
 
@@ -60,7 +78,7 @@ qpic_t      *fx_blood_ld;
 qpic_t      *fx_blood_rd;
 
 qboolean	sb_showscores;
-qboolean 	domaxammo;
+qboolean 	has_chaptertitle;
 qboolean 	doubletap_has_damage_buff;
 
 int  x_value, y_value;
@@ -112,6 +130,8 @@ HUD_Init
 void HUD_Init (void)
 {
 	int		i;
+	
+	has_chaptertitle = false;
 
 	for (i=0 ; i<5 ; i++)
 	{
@@ -139,6 +159,21 @@ void HUD_Init (void)
 	fragpic = Draw_CachePic ("gfx/hud/frag");
 	bettypic = Draw_CachePic ("gfx/hud/betty");
 
+#ifdef __PSP__
+	b_circle = Draw_CachePic ("gfx/butticons/circle");
+	b_square = Draw_CachePic ("gfx/butticons/square");
+	b_cross = Draw_CachePic ("gfx/butticons/cross");
+	b_triangle = Draw_CachePic ("gfx/butticons/triangle");
+	b_left = Draw_CachePic ("gfx/butticons/left");
+	b_right = Draw_CachePic ("gfx/butticons/right");
+	b_up = Draw_CachePic ("gfx/butticons/up");
+	b_down = Draw_CachePic ("gfx/butticons/down");
+	b_lt = Draw_CachePic ("gfx/butticons/lt");
+	b_rt = Draw_CachePic ("gfx/butticons/rt");
+	b_start = Draw_CachePic ("gfx/butticons/start");
+	b_select = Draw_CachePic ("gfx/butticons/select");
+	b_home = Draw_CachePic ("gfx/butticons/home");
+#elif _3DS
 	b_abutton = Draw_CachePic ("gfx/butticons/facebt_a");
 	b_bbutton = Draw_CachePic ("gfx/butticons/facebt_b");
 	b_ybutton = Draw_CachePic ("gfx/butticons/facebt_y");
@@ -153,6 +188,8 @@ void HUD_Init (void)
 	b_zrt = Draw_CachePic ("gfx/butticons/shldr_zr");
 	b_start = Draw_CachePic ("gfx/butticons/func_sta");
 	b_select = Draw_CachePic ("gfx/butticons/func_sel");
+#endif // __PSP__, _3DS
+
 
     fx_blood_lu = Draw_CachePic ("gfx/hud/blood");
     /*fx_blood_lu = Draw_CachePic ("gfx/hud/blood_tl");
@@ -160,8 +197,9 @@ void HUD_Init (void)
     fx_blood_ld = Draw_CachePic ("gfx/hud/blood_bl");
     fx_blood_rd = Draw_CachePic ("gfx/hud/blood_br");*/
 
-    // naievil -- fixme
-	//Achievement_Init();
+#ifdef __PSP__
+	Achievement_Init();
+#endif // __PSP__
 }
 
 /*
@@ -316,6 +354,7 @@ void HUD_EndScreen (void)
 
 }
 
+
 //=============================================================================
 
   //=============================================================================//
@@ -367,8 +406,8 @@ void HUD_Points (void)
 	l = scoreboardlines;
 
 
-    x = 5;
-    y = 167;
+    x = 6;
+    y = vid.height - 72;
 	for (i=0 ; i<l ; i++)
 	{
 		k = pointsort[i];
@@ -408,9 +447,9 @@ void HUD_Points (void)
 				point_change_interval_neg = 0;
 			}
 		}
+
 		Draw_Pic (x, y, sb_moneyback);
 		xplus = getTextWidth(va("%i", current_points), 1);
-
 		Draw_String (((64 - xplus)/2)+5, y + 3, va("%i", current_points));
 
 		if (old_points != f)
@@ -464,6 +503,7 @@ void HUD_Point_Change (void)
 	}
 }
 
+
 /*
 ==================
 HUD_Blood
@@ -472,28 +512,32 @@ HUD_Blood
 */
 void HUD_Blood (void)
 {
-    float alpha;
+	float alpha;
 	//blubswillrule:
 	//this function scales linearly from health = 0 to health = 100
 	//alpha = (100.0 - (float)cl.stats[STAT_HEALTH])/100*255;
 	//but we want the picture to be fully visible at health = 20, so use this function instead
 	alpha = (100.0 - ((1.25 * (float) cl.stats[STAT_HEALTH]) - 25))/100*255;
 	
-    if (alpha <= 0.0)
-        return;
+	if (alpha <= 0.0)
+		return;
     
-    float modifier = (sin(cl.time * 10) * 20) - 20;//always negative
+#ifdef PSP_VFPU
+	float modifier = (vfpu_sinf(cl.time * 10) * 20) - 20;//always negative
+#else
+	float modifier = (sin(cl.time * 10) * 20) - 20;//always negative
+#endif // PSP_VFPU
 
-    if(modifier < -35.0)
-	modifier = -35.0;
+	if(modifier < -35.0)
+		modifier = -35.0;
     
-    alpha += modifier;
+	alpha += modifier;
     
-    if(alpha < 0.0)
-	    return;
-    float color = 255.0 + modifier;
+	if(alpha < 0.0)
+		return;
+	float color = 255.0 + modifier;
     
-    Draw_ColoredStretchPic(0, 0, fx_blood_lu, 400, 240, color,color,color,alpha);
+	Draw_ColoredStretchPic(0, 0, fx_blood_lu, vid.width, vid.height, color, color, color, alpha);
 }
 
 /*
@@ -541,17 +585,22 @@ void HUD_WorldText(int alpha)
 
 		strcpy(value, com_token);
 
+		if (!strcmp("chaptertitle", key)) // search for chaptertitle key
+		{
+			has_chaptertitle = true;
+			Draw_ColoredString(6, vid.height/2 + 10, value, 255, 255, 255, alpha, 1);	
+		}
 		if (!strcmp("location", key)) // search for location key
 		{
-			Draw_ColoredString(4, vid.height/2 + 16, value, 255, 255, 255, alpha, 1);
+			Draw_ColoredString(6, vid.height/2 + 20, value, 255, 255, 255, alpha, 1);
 		}
 		if (!strcmp("date", key)) // search for date key
 		{
-			Draw_ColoredString(4, vid.height/2 + 26, value, 255, 255, 255, alpha, 1);
+			Draw_ColoredString(6, vid.height/2 + 30, value, 255, 255, 255, alpha, 1);
 		}
 		if (!strcmp("person", key)) // search for person key
 		{
-			Draw_ColoredString(4, vid.height/2 + 36, value, 255, 255, 255, alpha, 1);
+			Draw_ColoredString(6, vid.height/2 + 40, value, 255, 255, 255, alpha, 1);
 		}
 	}
 }
@@ -627,7 +676,7 @@ void HUD_Rounds (void)
 	x_offset = 0;
 	savex = 0;
 
-	// Round and Title text - moto
+	// Round and Title text - cypress
 	// extra creds to scatterbox for some x/y vals
 	// ------------------
 	// First, fade from white to red, ~3s duration
@@ -652,7 +701,9 @@ void HUD_Rounds (void)
 		Draw_ColoredStringCentered(80, "Round", 255, 0, 0, value, 2);
 
 		HUD_WorldText(value2);
-		Draw_ColoredString(4, vid.height/2 + 6, "'Nazi Zombies'", 255, 255, 255, value2, 1);
+		
+		if (has_chaptertitle == false)
+			Draw_ColoredString(6, vid.height/2 + 50, "'Nazi Zombies'", 255, 255, 255, value2, 1);
 		
 		value -= cl.time * 0.4;
 		value2 += cl.time * 0.4;
@@ -666,7 +717,9 @@ void HUD_Rounds (void)
 	// Hold world text for a few seconds
 	else if (textstate == 2) {
 		HUD_WorldText(255);
-		Draw_ColoredString(4, vid.height/2 + 6, "'Nazi Zombies'", 255, 255, 255, 255, 1);
+		
+		if (has_chaptertitle == false)
+			Draw_ColoredString(4, vid.height/2 + 50, "'Nazi Zombies'", 255, 255, 255, 255, 1);
 
 		value2 += cl.time * 0.4;
 
@@ -678,7 +731,9 @@ void HUD_Rounds (void)
 	// Fade worldtext out, finally.
 	else if (textstate == 3) {
 		HUD_WorldText(value2);
-		Draw_ColoredString(4, vid.height/2 + 6, "'Nazi Zombies'", 255, 255, 255, value2, 1);
+		
+		if (has_chaptertitle == false)
+			Draw_ColoredString(4, vid.height/2 + 50, "'Nazi Zombies'", 255, 255, 255, value2, 1);
 
 		value2 -= cl.time * 0.4;
 
@@ -688,7 +743,7 @@ void HUD_Rounds (void)
 		}
 	}
 	// ------------------
-	// End Round and Title text - moto
+	// End Round and Title text - cypress
 
 	if (cl.stats[STAT_ROUNDCHANGE] == 1)//this is the rounds icon at the middle of the screen
 	{
@@ -714,8 +769,8 @@ void HUD_Rounds (void)
 		round_center_y = round_center_y + 1;
 		if (round_center_x <= 5)
 			round_center_x = 5;
-		if (round_center_y >= 192) // vid.height - sb_round[0]->height
-			round_center_y = 192; // vid.height - sb_round[0]->height
+		if (round_center_y >= vid.height - sb_round[0]->height - 2)
+			round_center_y = vid.height - sb_round[0]->height - 2;
 	}
 	else if (cl.stats[STAT_ROUNDCHANGE] == 3)//shift to white
 	{
@@ -1184,7 +1239,7 @@ HUD_Powerups
 */
 void HUD_Powerups (void)
 {
-	int count;
+	int count = 0;
 
 	// horrible way to offset check :)))))))))))))))))) :DDDDDDDD XOXO
 
@@ -1196,13 +1251,13 @@ void HUD_Powerups (void)
 
 	// both are avail draw fixed order
 	if (count == 2) {
-		Draw_StretchPic((vid.width/2) - 27, 240 - 29, x2pic, 26, 26);
-		Draw_StretchPic((vid.width/2) + 3, 240 - 29, instapic, 26, 26);
+		Draw_StretchPic((vid.width/2) - 27, vid.height - 29, x2pic, 26, 26);
+		Draw_StretchPic((vid.width/2) + 3, vid.height - 29, instapic, 26, 26);
 	} else {
 		if (cl.stats[STAT_X2])
-			Draw_StretchPic((vid.width/2) - 13, 240 - 29, x2pic, 26, 26);
+			Draw_StretchPic((vid.width/2) - 13, vid.height - 29, x2pic, 26, 26);
 		if(cl.stats[STAT_INSTA])
-			Draw_StretchPic ((vid.width/2) - 13, 240 - 29, instapic, 28, 28);
+			Draw_StretchPic ((vid.width/2) - 13, vid.height - 29, instapic, 26, 26);
 	}
 }
 
@@ -1220,9 +1275,8 @@ void HUD_ProgressBar (void)
 		progressbar = 100 - ((cl.progress_bar-sv.time)*10);
 		if (progressbar >= 100)
 			progressbar = 100;
-
- 		Draw_FillByColor  (((vid.width) >> 1) - 51, (int)(vid.height*0.75 - 1), 102, 5, 0, 0, 0,100);
- 		Draw_FillByColor (((vid.width) >> 1) - 50, (int)((vid.height*3) >> 2), (int)progressbar, 3, 255, 255, 255,100);
+		Draw_FillByColor  ((vid.width)/2 - 51, vid.height*0.75 - 1, 102, 5, 0, 0, 0,100);
+		Draw_FillByColor ((vid.width)/2 - 50, vid.height*0.75, progressbar, 3, 255, 255, 255,100);
 
 		Draw_String ((vid.width - (88))/2, vid.height*0.75 + 10, "Reviving...");
 	}
@@ -1243,10 +1297,8 @@ char		achievement_text[MAX_QPATH];
 double		achievement_time;
 float smallsec;
 int ach_pic;
-
 void HUD_Achievement (void)
 {
-
 	if (achievement_unlocked == 1)
 	{
 		smallsec = smallsec + 0.7;
@@ -1263,20 +1315,22 @@ void HUD_Achievement (void)
 	{
 		achievement_unlocked = 0;
 	}
-
 }
 
 void HUD_Parse_Achievement (int ach)
 {
-    if (achievement_list[ach].unlocked)
-        return;
+	if (achievement_list[ach].unlocked)
+		return;
 
 	achievement_unlocked = 1;
 	smallsec = 0;
 	achievement_time = Sys_FloatTime() + 10;
 	ach_pic = ach;
 	achievement_list[ach].unlocked = 1;
-	//Save_Achivements();
+
+#ifdef __PSP__
+	Save_Achivements();
+#endif // __PSP__
 }
 
 /*
@@ -1326,9 +1380,9 @@ void HUD_Ammo (void)
 	//
 	magstring = va("%i", cl.stats[STAT_CURRENTMAG]);
 	if (GetLowAmmo(cl.stats[STAT_ACTIVEWEAPON], 1) >= cl.stats[STAT_CURRENTMAG]) {
-		Draw_ColoredString((355-(reslen)) - getTextWidth(magstring, 1), 218, magstring, 255, 0, 0, 255, 1);
+		Draw_ColoredString(((vid.width - 55) - (reslen)) - getTextWidth(magstring, 1), vid.height - 25, magstring, 255, 0, 0, 255, 1);
 	} else {
-		Draw_ColoredString((355-(reslen)) - getTextWidth(magstring, 1), 218, magstring, 255, 255, 255, 255, 1);
+		Draw_ColoredString(((vid.width - 55) - (reslen)) - getTextWidth(magstring, 1), vid.height - 25, magstring, 255, 255, 255, 255, 1);
 	}
 
 	//
@@ -1336,9 +1390,21 @@ void HUD_Ammo (void)
 	//
 	magstring = va("/%i", cl.stats[STAT_AMMO]);
 	if (GetLowAmmo(cl.stats[STAT_ACTIVEWEAPON], 0) >= cl.stats[STAT_AMMO]) {
-		Draw_ColoredString(355 - getTextWidth(magstring, 1), 218, magstring, 255, 0, 0, 255, 1);
+		Draw_ColoredString((vid.width - 55) - getTextWidth(magstring, 1), vid.height - 25, magstring, 255, 0, 0, 255, 1);
 	} else {
-		Draw_ColoredString(355 - getTextWidth(magstring, 1), 218, magstring, 255, 255, 255, 255, 1);
+		Draw_ColoredString((vid.width - 55) - getTextWidth(magstring, 1), vid.height - 25, magstring, 255, 255, 255, 255, 1);
+	}
+
+	//
+	// Second Magazine
+	//
+	if (IsDualWeapon(cl.stats[STAT_ACTIVEWEAPON])) {
+		magstring = va("%i", cl.stats[STAT_CURRENTMAG2]);
+		if (GetLowAmmo(cl.stats[STAT_ACTIVEWEAPON], 0) >= cl.stats[STAT_CURRENTMAG2]) {
+			Draw_ColoredString((vid.width - 89) - strlen(magstring)*8, vid.height - 25, magstring, 255, 0, 0, 255, 1);
+		} else {
+			Draw_ColoredString((vid.width - 89) - strlen(magstring)*8, vid.height - 25, magstring, 255, 255, 255, 255, 1);
+		}
 	}
 }
 
@@ -1352,12 +1418,14 @@ void HUD_AmmoString (void)
 {
 	if (GetLowAmmo(cl.stats[STAT_ACTIVEWEAPON], 1) >= cl.stats[STAT_CURRENTMAG])
 	{
+		int x;
+
 		if (0 < cl.stats[STAT_AMMO] && cl.stats[STAT_CURRENTMAG] >= 0) {
-			Draw_ColoredStringCentered(140, "Reload", 255, 255, 255, 255, 1);
+			Draw_ColoredStringCentered(vid.height - 100, "Reload", 255, 255, 255, 255, 1);
 		} else if (0 < cl.stats[STAT_CURRENTMAG]) {
-			Draw_ColoredStringCentered(140, "LOW AMMO", 255, 255, 0, 255, 1);
+			Draw_ColoredStringCentered(vid.height - 100, "LOW AMMO", 255, 255, 0, 255, 1);
 		} else {
-			Draw_ColoredStringCentered(140, "NO AMMO", 255, 0, 0, 255, 1);
+			Draw_ColoredStringCentered(vid.height - 100, "NO AMMO", 255, 0, 0, 255, 1);
 		}
 	}
 }
@@ -1372,21 +1440,23 @@ HUD_Grenades
 
 void HUD_Grenades (void)
 {
-	Draw_StretchPic (356, 205, fragpic, 22, 22);
+	Draw_StretchPic (vid.width - 53, vid.height - 40, fragpic, 22, 22);
+
 	if (cl.stats[STAT_GRENADES] & UI_FRAG)
 	{
 		if (cl.stats[STAT_PRIGRENADES] <= 0)
-			Draw_ColoredString (356 + 12, 205 + 16, va ("%i",cl.stats[STAT_PRIGRENADES]), 255, 0, 0, 255, 1);
+			Draw_ColoredString (vid.width - 40, vid.height - 25, va ("%i",cl.stats[STAT_PRIGRENADES]), 255, 0, 0, 255, 1);
 		else
-			Draw_String (356 + 12, 205 + 16, va ("%i",cl.stats[STAT_PRIGRENADES]));
+			Draw_String (vid.width - 40, vid.height - 25, va ("%i",cl.stats[STAT_PRIGRENADES]));
 	}
+
 	if (cl.stats[STAT_GRENADES] & UI_BETTY)
 	{
-		Draw_StretchPic (356 + 20, 205, bettypic, 22, 22);
+		Draw_StretchPic (vid.width - 32, vid.height - 40, bettypic, 22, 22);
 		if (cl.stats[STAT_PRIGRENADES] <= 0)
-			Draw_ColoredString (356 + 20 + 12, 205 + 16, va ("%i",cl.stats[STAT_SECGRENADES]), 255, 0, 0, 255, 1);
+			Draw_ColoredString (vid.width - 17, vid.height - 25, va ("%i",cl.stats[STAT_SECGRENADES]), 255, 0, 0, 255, 1);
 		else
-			Draw_String (356 + 20 + 12, 205 + 16, va ("%i",cl.stats[STAT_SECGRENADES]));
+			Draw_String (vid.width - 17, vid.height - 25, va ("%i",cl.stats[STAT_SECGRENADES]));
 	}
 }
 
@@ -1400,12 +1470,12 @@ void HUD_Weapon (void)
 	char str[32];
 	float l;
 	x_value = vid.width;
-	y_value = 205;
+	y_value = vid.height - 40;
 
 	strcpy(str, pr_strings+sv_player->v.Weapon_Name);
 	l = strlen(str);
 
-	x_value = 355 - getTextWidth(str, 1);
+	x_value = (vid.width - 58) - getTextWidth(str, 1);
 	Draw_String (x_value, y_value, str);
 }
 
@@ -1416,6 +1486,25 @@ HUD_BettyPrompt
 */
 void HUD_BettyPrompt (void)
 {
+#ifdef __PSP__
+
+	char str[64];
+	char str2[32];
+
+	strcpy(str, va("Double-tap  %s  then press  %s \n", GetUseButtonL(), GetGrenadeButtonL()));
+	strcpy(str2, "to place a Bouncing Betty\n");
+
+	int x;
+	x = (vid.width - getTextWidth(str, 1))/2;
+
+	Draw_ColoredStringCentered(60, str, 255, 255, 255, 255, 1);
+	Draw_ColoredStringCentered(70, str2, 255, 255, 255, 255, 1);
+
+	Draw_Pic (x + getTextWidth("Double-tap  ", 1) - 4, 60, GetButtonIcon("+use"));
+	Draw_Pic (x + getTextWidth("Double-tap     then press   ", 1) - 4, 60, GetButtonIcon("+grenade"));
+
+#elif _3DS
+
 	char str[32];
 	char str2[32];
 
@@ -1429,6 +1518,8 @@ void HUD_BettyPrompt (void)
 	Draw_ColoredStringCentered(72, str2, 255, 255, 255, 255, 1);
 
 	Draw_Pic (x + getTextWidth("Tap SWAP then press ", 1) - 4, 56, GetButtonIcon("+grenade"));
+
+#endif // __PSP__, _3DS
 }
 
 /*
@@ -1443,7 +1534,7 @@ void HUD_PlayerName (void)
 	if (nameprint_time - sv.time < 1)
 		alpha = (int)((nameprint_time - sv.time)*255);
 
-	Draw_ColoredString(70, 170, player_name, 255, 255, 255, alpha, 1);
+	Draw_ColoredString(70, vid.height - 70, player_name, 255, 255, 255, alpha, 1);
 }
 
 /*
@@ -1537,7 +1628,7 @@ void HUD_Draw (void)
 
 	if (waypoint_mode.value)
 	{
-		Draw_String (vid.width - 112, 0, "WAYPOINTMODE");
+		Draw_String (vid.width - 112, 0, "WAYPOINT MODE");
 		Draw_String (vid.width - 240, 8, "Press fire to create waypoint");
 		Draw_String (vid.width - 232, 16, "Press use to select waypoint");
 		Draw_String (vid.width - 216, 24, "Press aim to link waypoint");
@@ -1547,11 +1638,10 @@ void HUD_Draw (void)
 		return;
 	}
 
-
 	if (cl.stats[STAT_HEALTH] <= 0)
 	{
 		HUD_EndScreen ();
-
+		
 		// Make sure we still draw the screen flash.
 		if (screenflash_duration > sv.time)
 			HUD_Screenflash();
