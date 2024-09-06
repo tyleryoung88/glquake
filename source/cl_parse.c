@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 See the GNU General Public License for more details.
 
@@ -21,8 +21,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "quakedef.h"
 
-extern qboolean domaxammo;
-qboolean crosshair_pulse_grenade;
+extern 	qboolean 	domaxammo;
+qboolean 			crosshair_pulse_grenade;
+
+extern int EN_Find(int num,char *string);
 
 char *svc_strings[] =
 {
@@ -75,9 +77,8 @@ char *svc_strings[] =
     "svc_fog",    // 41		// [byte] start [byte] end [byte] red [byte] green [byte] blue [float] time
     "svc_bspdecal", //42     // [string] name [byte] decal_size [coords] pos
     "svc_achievement", //43
-	"svc_songegg", //44 			[string] track name
-	"svc_maxammo", //45
-	"svc_pulse" //46
+	"svc_maxammo" //44
+	//"svc_pulse" //45
 };
 
 //=============================================================================
@@ -101,7 +102,7 @@ entity_t	*CL_EntityNum (int num)
 			cl.num_entities++;
 		}
 	}
-		
+
 	return &cl_entities[num];
 }
 
@@ -118,21 +119,21 @@ void CL_ParseStartSoundPacket(void)
     int 	sound_num;
     int 	volume;
     int 	field_mask;
-    float 	attenuation;  
+    float 	attenuation;
  	int		i;
-	           
-    field_mask = MSG_ReadByte(); 
+
+    field_mask = MSG_ReadByte();
 
     if (field_mask & SND_VOLUME)
 		volume = MSG_ReadByte ();
 	else
 		volume = DEFAULT_SOUND_PACKET_VOLUME;
-	
+
     if (field_mask & SND_ATTENUATION)
 		attenuation = MSG_ReadByte () / 64.0;
 	else
 		attenuation = DEFAULT_SOUND_PACKET_ATTENUATION;
-	
+
 	channel = MSG_ReadShort ();
 	sound_num = MSG_ReadByte ();
 
@@ -141,12 +142,42 @@ void CL_ParseStartSoundPacket(void)
 
 	if (ent > MAX_EDICTS)
 		Host_Error ("CL_ParseStartSoundPacket: ent = %i", ent);
-	
+
 	for (i=0 ; i<3 ; i++)
 		pos[i] = MSG_ReadCoord ();
- 
+
     S_StartSound (ent, channel, cl.sound_precache[sound_num], pos, volume/255.0, attenuation);
-}       
+}
+
+/*
+==================
+CL_ParseBSPDecal
+
+Spawn decals on map
+Crow_bar.
+==================
+*/
+void CL_ParseBSPDecal (void)
+{
+#ifdef __PSP__
+	vec3_t		pos;
+	int			decal_size;
+	char        *texname;
+
+    texname     = MSG_ReadString ();
+    decal_size  = MSG_ReadByte   ();
+	pos[0]      = MSG_ReadCoord  ();
+    pos[1]      = MSG_ReadCoord  ();
+    pos[2]      = MSG_ReadCoord  ();
+
+	if(!texname)
+		return;
+
+	Con_Printf("BSPDECAL[tex: %s size: %i pos: %f %f %f]\n", texname, decal_size, pos[0], pos[1], pos[2]);
+
+	R_SpawnDecalBSP(pos, texname, decal_size);
+#endif // __PSP__
+}
 
 /*
 ==================
@@ -158,28 +189,38 @@ so the server doesn't disconnect.
 */
 void CL_KeepaliveMessage (void)
 {
-	float	time;
-	static float lastmsg;
+	double	time;
+	static double lastmsg;//BLUBSFIX, this was a float
 	int		ret;
 	sizebuf_t	old;
 	byte		olddata[8192];
-	
+
 	if (sv.active)
+	{
+		//Con_Printf("Active Server...exit keepalive\n");
 		return;		// no need if server is local
+	}
 	if (cls.demoplayback)
+	{
+		//Con_Printf("Demo Playback...exit keepalive\n");
 		return;
+	}
 
 // read messages from server, should just be nops
 	old = net_message;
-	memcpy (olddata, net_message.data, net_message.cursize);
-	
+#ifdef PSP_VFPU
+	memcpy_vfpu(olddata, net_message.data, net_message.cursize);
+#else
+	memcpy(olddata, net_message.data, net_message.cursize);
+#endif // PSP_VFPU
+
 	do
 	{
 		ret = CL_GetMessage ();
 		switch (ret)
 		{
 		default:
-			Host_Error ("CL_KeepaliveMessage: CL_GetMessage failed");		
+			Host_Error ("CL_KeepaliveMessage: CL_GetMessage failed");
 		case 0:
 			break;	// nothing waiting
 		case 1:
@@ -193,12 +234,18 @@ void CL_KeepaliveMessage (void)
 	} while (ret);
 
 	net_message = old;
-	memcpy (net_message.data, olddata, net_message.cursize);
+#ifdef PSP_VFPU
+	memcpy_vfpu(net_message.data, olddata, net_message.cursize);
+#else
+	memcpy(net_message.data, olddata, net_message.cursize);
+#endif // PSP_VFPU
 
 // check time
 	time = Sys_FloatTime ();
 	if (time - lastmsg < 5)
 		return;
+	//Con_Printf("Time since last keepAlive msg = %f\n",time - lastmsg);
+
 	lastmsg = time;
 
 // write out a nop
@@ -214,15 +261,29 @@ void CL_KeepaliveMessage (void)
 CL_ParseServerInfo
 ==================
 */
+int has_pap;
+int has_perk_revive;
+int has_perk_juggernog;
+int has_perk_speedcola;
+int has_perk_doubletap;
+int has_perk_staminup;
+int has_perk_flopper;
+int has_perk_deadshot;
+int has_perk_mulekick;
 void CL_ParseServerInfo (void)
 {
-	char	*str;
+	char	*str, tempname[MAX_QPATH];;
 	int		i;
 	int		nummodels, numsounds;
 	char	model_precache[MAX_MODELS][MAX_QPATH];
 	char	sound_precache[MAX_SOUNDS][MAX_QPATH];
-	
+
+	//void R_PreMapLoad (char *);
+
+	//char	mapname[MAX_QPATH];
+
 	Con_DPrintf ("Serverinfo packet received.\n");
+	//Con_Printf ("Serverinfo packet received.\n");
 //
 // wipe the client_state_t struct
 //
@@ -266,19 +327,36 @@ void CL_ParseServerInfo (void)
 	for (i=0 ; i<NUM_MODELINDEX ; i++)
 		cl_modelindex[i] = -1;
 
+	has_pap = EN_Find(0,"perk_pap");
+	has_perk_revive = EN_Find(0, "perk_revive");
+	has_perk_juggernog = EN_Find(0, "perk_juggernog");
+	has_perk_speedcola = EN_Find(0, "perk_speed");
+	has_perk_doubletap = EN_Find(0, "perk_double");
+	has_perk_staminup = EN_Find(0, "perk_staminup");
+	has_perk_flopper = EN_Find(0, "perk_flopper");
+	has_perk_deadshot = EN_Find(0, "perk_deadshot");
+	has_perk_mulekick = EN_Find(0, "perk_mule");
+
+
 // precache models
 	memset (cl.model_precache, 0, sizeof(cl.model_precache));
+	//Con_Printf("GotModelsToLoad: ");
 	for (nummodels=1 ; ; nummodels++)
 	{
 		str = MSG_ReadString ();
+
 		if (!str[0])
 			break;
+
 		if (nummodels==MAX_MODELS)
 		{
 			Con_Printf ("Server sent too many model precaches\n");
 			return;
 		}
-		strcpy (model_precache[nummodels], str);
+
+		Q_strncpyz (model_precache[nummodels], str, sizeof(model_precache[nummodels]));
+		//Con_Printf("%i,",nummodels);
+
 		Mod_TouchModel (str);
 
 		if (!strcmp(model_precache[nummodels], "models/player.mdl"))
@@ -287,12 +365,14 @@ void CL_ParseServerInfo (void)
 			cl_modelindex[mi_flame1] = nummodels;
 		else if (!strcmp(model_precache[nummodels], "progs/flame2.mdl"))
 			cl_modelindex[mi_flame2] = nummodels;
-	}
+  }
 
 // precache sounds
+	//Con_Printf("Got Sounds to load: ");
 	memset (cl.sound_precache, 0, sizeof(cl.sound_precache));
 	for (numsounds=1 ; ; numsounds++)
 	{
+
 		str = MSG_ReadString ();
 		if (!str[0])
 			break;
@@ -303,7 +383,11 @@ void CL_ParseServerInfo (void)
 		}
 		strcpy (sound_precache[numsounds], str);
 		S_TouchSound (str);
+		//Con_Printf("%i,",numsounds);
 	}
+	//Con_Printf("\n");
+    //COM_StripExtension (COM_SkipPath(model_precache[1]), mapname);
+	//R_PreMapLoad (mapname);
 
 //
 // now we try to load everything else until a cache allocation fails
@@ -312,48 +396,62 @@ void CL_ParseServerInfo (void)
    loading_num_step = loading_num_step +nummodels + numsounds;
    loading_step = 1;
 
-  	for (i=1 ; i<nummodels ; i++)
+	//Con_Printf("Loaded Model: ");
+
+	for (i=1 ; i<nummodels ; i++)
 	{
 		cl.model_precache[i] = Mod_ForName (model_precache[i], false);
 		if (cl.model_precache[i] == NULL)
 		{
 			Con_Printf("Model %s not found\n", model_precache[i]);
 			loading_cur_step++;
-			//return;
+			return;
 		}
 		CL_KeepaliveMessage ();
 		loading_cur_step++;
 		strcpy(loading_name, model_precache[i]);
+		//Con_Printf("%i,",i);
 		SCR_UpdateScreen ();
 	}
+
+	//Con_Printf("\n");
+	//Con_Printf("Total Models loaded: %i\n",nummodels);
 	SCR_UpdateScreen ();
+
+	// load the extra "no-flamed-torch" model
+	//cl.model_precache[nummodels] = Mod_ForName ("progs/flame0.mdl", false);
+	//cl_modelindex[mi_flame0] = nummodels++;
 
 	loading_step = 4;
 
 	S_BeginPrecaching ();
+	//Con_Printf("Loaded Sounds: ");
 	for (i=1 ; i<numsounds ; i++)
 	{
 		cl.sound_precache[i] = S_PrecacheSound (sound_precache[i]);
 		CL_KeepaliveMessage ();
 		loading_cur_step++;
+		//Con_Printf("%i,",i);
 		strcpy(loading_name, sound_precache[i]);
 		SCR_UpdateScreen ();
 	}
 	S_EndPrecaching ();
 
+	//Con_Printf("...\n");
+	//Con_Printf("Total Sounds Loaded: %i\n",numsounds);
 	SCR_UpdateScreen ();
 
    	Clear_LoadingFill ();
 
 // local state
 	cl_entities[0].model = cl.worldmodel = cl.model_precache[1];
-	
+
 	R_NewMap ();
 
 	Hunk_Check ();		// make sure nothing is hurt
 	HUD_NewMap ();
 
-	noclip_anglehack = false;		// noclip is turned off at start	
+	noclip_anglehack = false;		// noclip is turned off at start
 }
 
 
@@ -376,13 +474,16 @@ void CL_ParseUpdate (int bits)
 	qboolean	forcelink;
 	entity_t	*ent;
 	int			num;
-	int			skin;
+    //int		    skin;
 
 	if (cls.signon == SIGNONS - 1)
 	{	// first update is the final signon stage
+		Con_DPrintf("First Update\n");
 		cls.signon = SIGNONS;
-		CL_SignonReply ();
+		CL_SignonReply (); //disabling this temp-mortem
 	}
+	//Con_Printf("2\n");
+
 
 	if (bits & U_MOREBITS)
 	{
@@ -402,16 +503,16 @@ void CL_ParseUpdate (int bits)
 	}
 	// Tomaz - QC Control End
 
-	if (bits & U_LONGENTITY)	
+	if (bits & U_LONGENTITY)
 		num = MSG_ReadShort ();
 	else
 		num = MSG_ReadByte ();
 
 	ent = CL_EntityNum (num);
 
-for (i=0 ; i<16 ; i++)
-if (bits&(1<<i))
-	bitcounts[i]++;
+	for (i=0 ; i<16 ; i++)
+		if (bits&(1<<i))
+			bitcounts[i]++;
 
 	if (ent->msgtime != cl.mtime[1])
 		forcelink = true;	// no previous frame to lerp from
@@ -419,7 +520,7 @@ if (bits&(1<<i))
 		forcelink = false;
 
 	ent->msgtime = cl.mtime[0];
-	
+
 	if (bits & U_MODEL)
 	{
 		modnum = MSG_ReadShort ();
@@ -428,7 +529,7 @@ if (bits&(1<<i))
 	}
 	else
 		modnum = ent->baseline.modelindex;
-		
+
 	model = cl.model_precache[modnum];
 	if (model != ent->model)
 	{
@@ -444,12 +545,8 @@ if (bits&(1<<i))
 		}
 		else
 			forcelink = true;	// hack to make null model players work
-#ifdef GLQUAKE
-		if (num > 0 && num <= cl.maxclients)
-			R_TranslatePlayerSkin (num - 1);
-#endif
 	}
-	
+
 	if (bits & U_FRAME)
 		ent->frame = MSG_ReadByte ();
 	else
@@ -480,7 +577,6 @@ if (bits&(1<<i))
 // shift the known values for interpolation
 	VectorCopy (ent->msg_origins[0], ent->msg_origins[1]);
 	VectorCopy (ent->msg_angles[0], ent->msg_angles[1]);
-
 	if (bits & U_ORIGIN1)
 		ent->msg_origins[0][0] = MSG_ReadCoord ();
 	else
@@ -507,7 +603,6 @@ if (bits&(1<<i))
 		ent->msg_angles[0][2] = MSG_ReadAngle();
 	else
 		ent->msg_angles[0][2] = ent->baseline.angles[2];
-
 // Tomaz - QC Alpha Scale Glow Begin
 	if (bits & U_RENDERAMT)
 	    ent->renderamt = MSG_ReadFloat();
@@ -540,7 +635,7 @@ if (bits&(1<<i))
 	else
 		ent->scale = ENTSCALE_DEFAULT;
 
-	if ( bits & U_NOLERP )
+    if ( bits & U_NOLERP )//there's no data for nolerp, it is the value itself
 		ent->forcelink = true;
 
 	if ( forcelink )
@@ -561,7 +656,7 @@ CL_ParseBaseline
 void CL_ParseBaseline (entity_t *ent)
 {
 	int			i;
-	
+
 	ent->baseline.modelindex = MSG_ReadShort ();
 	ent->baseline.frame = MSG_ReadByte ();
 	ent->baseline.colormap = MSG_ReadByte();
@@ -572,7 +667,6 @@ void CL_ParseBaseline (entity_t *ent)
 		ent->baseline.angles[i] = MSG_ReadAngle ();
 	}
 }
-
 
 /*
 ==================
@@ -917,7 +1011,7 @@ void CL_ParseStatic (void)
 {
 	entity_t *ent;
 	int		i;
-		
+
 	i = cl.num_statics;
 	if (i >= MAX_STATIC_ENTITIES)
 		Host_Error ("Too many static entities");
@@ -933,7 +1027,7 @@ void CL_ParseStatic (void)
 	ent->effects = ent->baseline.effects;
 
 	VectorCopy (ent->baseline.origin, ent->origin);
-	VectorCopy (ent->baseline.angles, ent->angles);	
+	VectorCopy (ent->baseline.angles, ent->angles);
 	R_AddEfrags (ent);
 }
 
@@ -947,16 +1041,15 @@ void CL_ParseStaticSound (void)
 	vec3_t		org;
 	int			sound_num, vol, atten;
 	int			i;
-	
+
 	for (i=0 ; i<3 ; i++)
 		org[i] = MSG_ReadCoord ();
 	sound_num = MSG_ReadByte ();
 	vol = MSG_ReadByte ();
 	atten = MSG_ReadByte ();
-	
+
 	S_StaticSound (cl.sound_precache[sound_num], org, vol, atten);
 }
-
 
 extern double Hitmark_Time;
 extern int crosshair_spread;
@@ -976,12 +1069,12 @@ void CL_ParseWeaponFire (void)
 	kick[0] = MSG_ReadCoord()/5;
 	kick[1] = MSG_ReadCoord()/5;
 	kick[2] = MSG_ReadCoord()/5;
-	
+
 	cl.gun_kick[0] += kick[0];
 	cl.gun_kick[1] += kick[1];
 	cl.gun_kick[2] += kick[2];
-}
 
+}
 /*
 ===================
 CL_ParseLimbUpdate
@@ -1007,15 +1100,20 @@ void CL_ParseLimbUpdate (void)
     }
 }
 
+
 #define SHOWNET(x) if(cl_shownet.value==2)Con_Printf ("%3i:%s\n", msg_readcount-1, x);
 
+/*
+=====================
+CL_ParseServerMessage
+=====================
+*/
 extern double bettyprompt_time;
 extern qboolean doubletap_has_damage_buff;
 void CL_ParseServerMessage (void)
 {
 	int			cmd;
 	int			i;
-	int			total, j, lastcmd; //johnfitz
 
 //
 // if recording demos, copy the message out
@@ -1024,13 +1122,13 @@ void CL_ParseServerMessage (void)
 		Con_Printf ("%i ",net_message.cursize);
 	else if (cl_shownet.value == 2)
 		Con_Printf ("------------------\n");
-	
-	cl.onground = false;	// unless the server says otherwise	
+
+	cl.onground = false;	// unless the server says otherwise
 //
 // parse the message
 //
 	MSG_BeginReading ();
-	
+
 	while (1)
 	{
 		if (msg_badread)
@@ -1045,49 +1143,48 @@ void CL_ParseServerMessage (void)
 		}
 
 	// if the high bit of the command byte is set, it is a fast update
-		if (cmd & 128)
+		if (cmd & 128)//checking if it's an entity update, if it is the 7th bit will be on, this is checking for that
 		{
 			SHOWNET("fast update");
-			CL_ParseUpdate (cmd&127);
+			CL_ParseUpdate (cmd&127);//here we strip the cmd from the value of the 7th (128) bit, to only give the rest of the commands
 			continue;
 		}
 
 		SHOWNET(svc_strings[cmd]);
-	
+
 	// other commands
 		switch (cmd)
 		{
 		default:
-			Host_Error ("CL_ParseServerMessage: Illegible server message: cmd = %d\n", cmd);
+			Host_Error ("CL_ParseServerMessage: Illegible server message (%i)\n", cmd);
 			break;
-			
+
 		case svc_nop:
-//			Con_Printf ("svc_nop\n");
 			break;
-			
+
 		case svc_time:
 			cl.mtime[1] = cl.mtime[0];
-			cl.mtime[0] = MSG_ReadFloat ();			
+			cl.mtime[0] = MSG_ReadFloat ();
 			break;
-			
+
 		case svc_clientdata:
 			i = MSG_ReadShort ();
 			CL_ParseClientdata (i);
 			break;
-		
+
 		case svc_version:
 			i = MSG_ReadLong ();
 			if (i != PROTOCOL_VERSION)
 				Host_Error ("CL_ParseServerMessage: Server is protocol %i instead of %i\n", i, PROTOCOL_VERSION);
 			break;
-			
+
 		case svc_disconnect:
 			Host_EndGame ("Server disconnected\n");
 
 		case svc_print:
 			Con_Printf ("%s", MSG_ReadString ());
 			break;
-			
+
 		case svc_centerprint:
 			SCR_CenterPrint (MSG_ReadString ());
 			break;
@@ -1095,7 +1192,6 @@ void CL_ParseServerMessage (void)
 		case svc_useprint:
 			SCR_UsePrint (MSG_ReadByte (),MSG_ReadShort (),MSG_ReadByte ());
 			break;
-
 		case svc_maxammo:
 			domaxammo = true;
 			break;
@@ -1136,69 +1232,63 @@ void CL_ParseServerMessage (void)
 			nameprint_time = sv.time + 11;
 			strcpy(player_name, MSG_ReadString());
 			break;
-			
+
 		case svc_stufftext:
 			Cbuf_AddText (MSG_ReadString ());
 			break;
-			
-		case svc_damage:
-			V_ParseDamage ();
-			break;
-			
 		case svc_serverinfo:
 			CL_ParseServerInfo ();
 			vid.recalc_refdef = true;	// leave intermission full screen
 			break;
-			
+
 		case svc_setangle:
 			for (i=0 ; i<3 ; i++)
 				cl.viewangles[i] = MSG_ReadAngle ();
 			break;
-			
+
 		case svc_setview:
 			cl.viewentity = MSG_ReadShort ();
 			break;
-					
+
 		case svc_lightstyle:
 			i = MSG_ReadByte ();
 			if (i >= MAX_LIGHTSTYLES)
 				Sys_Error ("svc_lightstyle > MAX_LIGHTSTYLES");
-			q_strlcpy (cl_lightstyle[i].map, MSG_ReadString(), MAX_STYLESTRING);
+			Q_strcpy (cl_lightstyle[i].map,  MSG_ReadString());
 			cl_lightstyle[i].length = Q_strlen(cl_lightstyle[i].map);
-			//johnfitz -- save extra info
-			if (cl_lightstyle[i].length)
-			{
-				total = 0;
-				cl_lightstyle[i].peak = 'a';
-				for (j=0; j<cl_lightstyle[i].length; j++)
-				{
-					total += cl_lightstyle[i].map[j] - 'a';
-					cl_lightstyle[i].peak = fmax(cl_lightstyle[i].peak, cl_lightstyle[i].map[j]);
-				}
-				cl_lightstyle[i].average = total / cl_lightstyle[i].length + 'a';
-			}
-			else
-				cl_lightstyle[i].average = cl_lightstyle[i].peak = 'm';
-			//johnfitz
 			break;
-			
+
 		case svc_sound:
 			CL_ParseStartSoundPacket();
 			break;
-			
+
 		case svc_stopsound:
 			i = MSG_ReadShort();
 			S_StopSound(i>>3, i&7);
 			break;
-		
+
 		case svc_updatename:
-			Sbar_Changed ();
 			i = MSG_ReadByte ();
 			if (i >= cl.maxclients)
 				Host_Error ("CL_ParseServerMessage: svc_updatename > MAX_SCOREBOARD");
 			strcpy (cl.scores[i].name, MSG_ReadString ());
 			break;
-			
+
+		case svc_updatepoints:
+			i = MSG_ReadByte ();
+			if (i >= cl.maxclients)
+				Host_Error ("CL_ParseServerMessage: svc_updatepoints > MAX_SCOREBOARD");
+			cl.scores[i].points = MSG_ReadLong ();
+			break;
+
+		case svc_updatekills:
+			i = MSG_ReadByte ();
+			if (i >= cl.maxclients)
+				Host_Error ("CL_ParseServerMessage: svc_updatepoints > MAX_SCOREBOARD");
+			cl.scores[i].kills = MSG_ReadShort ();
+			break;
+
+
 		case svc_particle:
 			R_ParseParticleEffect ();
 			break;
@@ -1210,7 +1300,7 @@ void CL_ParseServerMessage (void)
 			break;
 		case svc_spawnstatic:
 			CL_ParseStatic ();
-			break;			
+			break;
 		case svc_temp_entity:
 			CL_ParseTEnt ();
 			break;
@@ -1222,25 +1312,20 @@ void CL_ParseServerMessage (void)
 				if (cl.paused)
 				{
 					CDAudio_Pause ();
-#ifdef _WIN32
-					VID_HandlePause (true);
-#endif
 				}
 				else
 				{
 					CDAudio_Resume ();
-#ifdef _WIN32
-					VID_HandlePause (false);
-#endif
 				}
 			}
 			break;
-			
+
 		case svc_signonnum:
 			i = MSG_ReadByte ();
 			if (i <= cls.signon)
 				Host_Error ("Received signon %i when at %i", i, cls.signon);
 			cls.signon = i;
+			Con_DPrintf("Signon: %i \n",i);
 			CL_SignonReply ();
 			break;
 
@@ -1248,9 +1333,9 @@ void CL_ParseServerMessage (void)
 			i = MSG_ReadByte ();
 			if (i < 0 || i >= MAX_CL_STATS)
 				Sys_Error ("svc_updatestat: %i is invalid", i);
-			cl.stats[i] = MSG_ReadLong ();;
+			cl.stats[i] = MSG_ReadLong ();
 			break;
-			
+
 		case svc_spawnstaticsound:
 			CL_ParseStaticSound ();
 			break;
@@ -1258,10 +1343,6 @@ void CL_ParseServerMessage (void)
 		case svc_cdtrack:
 			cl.cdtrack = MSG_ReadByte ();
 			cl.looptrack = MSG_ReadByte ();
-			if ( (cls.demoplayback || cls.demorecording) && (cls.forcetrack != -1) )
-				CDAudio_Play ((byte)cls.forcetrack, true);
-			else
-				CDAudio_Play ((byte)cl.cdtrack, true);
 			break;
 
 		case svc_intermission:
@@ -1274,18 +1355,25 @@ void CL_ParseServerMessage (void)
 			cl.intermission = 2;
 			cl.completed_time = cl.time;
 			vid.recalc_refdef = true;	// go to full screen
-			SCR_CenterPrint (MSG_ReadString ());			
+			SCR_CenterPrint (MSG_ReadString ());
 			break;
 
 		case svc_cutscene:
 			cl.intermission = 3;
 			cl.completed_time = cl.time;
 			vid.recalc_refdef = true;	// go to full screen
-			SCR_CenterPrint (MSG_ReadString ());			
+			SCR_CenterPrint (MSG_ReadString ());
 			break;
 
 		case svc_sellscreen:
 			Cmd_ExecuteString ("help", src_command);
+			break;
+
+	    case svc_skybox:
+			Sky_LoadSkyBox(MSG_ReadString());
+			break;
+		case svc_fog:
+			Fog_ParseServerMessage ();
 			break;
 
 		case svc_achievement:
@@ -1304,19 +1392,8 @@ void CL_ParseServerMessage (void)
 			CL_ParseLimbUpdate();
 			break;
 
-		case svc_updatepoints:
-			i = MSG_ReadByte ();
-			if (i >= cl.maxclients)
-				Host_Error ("CL_ParseServerMessage: svc_updatepoints > MAX_SCOREBOARD");
-			cl.scores[i].points = MSG_ReadLong ();
-
-			break;
-
-		case svc_updatekills:
-			i = MSG_ReadByte ();
-			if (i >= cl.maxclients)
-				Host_Error ("CL_ParseServerMessage: svc_updatekills > MAX_SCOREBOARD");
-			cl.scores[i].kills = MSG_ReadShort ();
+		case svc_bspdecal:
+			CL_ParseBSPDecal ();
 			break;
 		}
 	}
