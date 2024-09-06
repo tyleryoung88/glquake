@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 See the GNU General Public License for more details.
 
@@ -20,17 +20,20 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // host.c -- coordinates spawning and killing of local servers
 
 #include "quakedef.h"
-#include "r_local.h"
+
+#ifdef __PSP__
+#include "thread.h"
+#include "psp/module.h"
+#include <pspge.h>
+#include <pspsysevent.h>
+#endif // __PSP__
 
 /*
 
 A server can allways be started, even if the system started out as a client
 to a remote system.
-
 A client can NOT be started if the system started as a dedicated server.
-
 Memory is cleared / released when a server or client begins, not when they end.
-
 */
 
 quakeparms_t host_parms;
@@ -53,10 +56,11 @@ jmp_buf 	host_abortserver;
 
 byte		*host_basepal;
 byte		*host_colormap;
+byte		*host_q2pal;
+byte		*host_h2pal;
 
 cvar_t	host_framerate = {"host_framerate","0"};	// set for slow motion
 cvar_t	host_speeds = {"host_speeds","0"};			// set for running times
-cvar_t 	host_maxfps = {"host_maxfps", "500"};
 
 cvar_t	sys_ticrate = {"sys_ticrate","0.05"};
 cvar_t	serverprofile = {"serverprofile","0"};
@@ -66,9 +70,17 @@ cvar_t	timelimit = {"timelimit","0",false,true};
 cvar_t	teamplay = {"teamplay","0",false,true};
 
 cvar_t	samelevel = {"samelevel","0"};
-cvar_t	noexit = {"noexit","0",false,true};
 
-cvar_t	developer = {"developer","0"};	// should be 0 for release!
+cvar_t	show_fps = {"show_fps","0", true};	// set for running times - muff
+cvar_t	cl_maxfps = {"cl_maxfps", "30", true}; // dr_mabuse1981: maxfps setting
+
+#ifdef __PSP__
+cvar_t	show_bat = {"show_bat","0"};	// test
+#endif // __PSP__
+
+int			fps_count;
+
+cvar_t	developer = {"developer","0"};
 
 cvar_t	skill = {"skill","1"};						// 0 - 3
 cvar_t	deathmatch = {"deathmatch","0"};			// 0, 1, or 2
@@ -78,16 +90,10 @@ cvar_t	pausable = {"pausable","1"};
 
 cvar_t	temp1 = {"temp1","0"};
 
-/*
-================
-Max_Fps_f -- ericw
-================
-*/
-static void Max_Fps_f (cvar_t *var)
-{
-	if (var->value > 72)
-		Con_Warning ("host_maxfps above 72 breaks physics.\n");
-}
+cvar_t 	host_timescale = {"host_timescale", "0"}; //johnfitz
+
+qboolean bmg_type_changed = false;
+
 
 /*
 ================
@@ -98,18 +104,18 @@ void Host_EndGame (char *message, ...)
 {
 	va_list		argptr;
 	char		string[1024];
-	
+
 	va_start (argptr,message);
 	vsprintf (string,message,argptr);
 	va_end (argptr);
 	Con_DPrintf ("Host_EndGame: %s\n",string);
-	
+
 	if (sv.active)
 		Host_ShutdownServer (false);
 
 	if (cls.state == ca_dedicated)
 		Sys_Error ("Host_EndGame: %s\n",string);	// dedicated servers exit
-	
+
 	if (cls.demonum != -1)
 		CL_NextDemo ();
 	else
@@ -132,18 +138,18 @@ void Host_Error (char *error, ...)
 	va_list		argptr;
 	char		string[1024];
 	static	qboolean inerror = false;
-	
+
 	if (inerror)
 		Sys_Error ("Host_Error: recursively entered");
 	inerror = true;
-	
+
 	SCR_EndLoadingPlaque ();		// reenable screen updates
 
 	va_start (argptr,error);
 	vsprintf (string,error,argptr);
 	va_end (argptr);
 	Con_Printf ("Host_Error: %s\n",string);
-	
+
 	if (sv.active)
 		Host_ShutdownServer (false);
 
@@ -170,7 +176,7 @@ void	Host_FindMaxClients (void)
 	int		i;
 
 	svs.maxclients = 1;
-		
+
 	i = COM_CheckParm ("-dedicated");
 	if (i)
 	{
@@ -217,31 +223,26 @@ void	Host_FindMaxClients (void)
 Host_InitLocal
 ======================
 */
-extern bool new3ds_flag;
 void Host_InitLocal (void)
 {
 	Host_InitCommands ();
-	
+
 	Cvar_RegisterVariable (&host_framerate);
 	Cvar_RegisterVariable (&host_speeds);
-	Cvar_RegisterVariable (&host_maxfps);
-
-	if (host_maxfps.value == 500) {
-		if (new3ds_flag) {
-			Cvar_SetValue("host_maxfps", 60);
-		} else {
-			Cvar_SetValue("host_maxfps", 20);
-		}
-	}
 
 	Cvar_RegisterVariable (&sys_ticrate);
 	Cvar_RegisterVariable (&serverprofile);
 
+#ifdef __PSP__
+    Cvar_RegisterVariable (&show_bat); // Crow_bar battery info
+#endif // __PSP__
+
+	Cvar_RegisterVariable (&show_fps); // muff
+	Cvar_RegisterVariable (&cl_maxfps); // dr_mabuse1981: maxfps setting
 	Cvar_RegisterVariable (&fraglimit);
 	Cvar_RegisterVariable (&timelimit);
 	Cvar_RegisterVariable (&teamplay);
 	Cvar_RegisterVariable (&samelevel);
-	Cvar_RegisterVariable (&noexit);
 	Cvar_RegisterVariable (&skill);
 	Cvar_RegisterVariable (&developer);
 	Cvar_RegisterVariable (&deathmatch);
@@ -250,9 +251,10 @@ void Host_InitLocal (void)
 	Cvar_RegisterVariable (&pausable);
 
 	Cvar_RegisterVariable (&temp1);
+	Cvar_RegisterVariable (&host_timescale);
 
 	Host_FindMaxClients ();
-	
+
 	host_time = 1.0;		// so a think at time 0 won't get called
 }
 
@@ -278,7 +280,7 @@ void Host_WriteConfiguration (void)
 			Con_Printf ("Couldn't write config.cfg.\n");
 			return;
 		}
-		
+
 		Key_WriteBindings (f);
 		Key_WriteDTBindings (f);
 		Cvar_WriteVariables (f);
@@ -292,7 +294,7 @@ void Host_WriteConfiguration (void)
 =================
 SV_ClientPrintf
 
-Sends text across to be displayed 
+Sends text across to be displayed
 FIXME: make this just a stuffed echo?
 =================
 */
@@ -300,11 +302,11 @@ void SV_ClientPrintf (char *fmt, ...)
 {
 	va_list		argptr;
 	char		string[1024];
-	
+
 	va_start (argptr,fmt);
 	vsprintf (string, fmt,argptr);
 	va_end (argptr);
-	
+
 	MSG_WriteByte (&host_client->message, svc_print);
 	MSG_WriteString (&host_client->message, string);
 }
@@ -321,11 +323,11 @@ void SV_BroadcastPrintf (char *fmt, ...)
 	va_list		argptr;
 	char		string[1024];
 	int			i;
-	
+
 	va_start (argptr,fmt);
 	vsprintf (string, fmt,argptr);
 	va_end (argptr);
-	
+
 	for (i=0 ; i<svs.maxclients ; i++)
 		if (svs.clients[i].active && svs.clients[i].spawned)
 		{
@@ -345,11 +347,11 @@ void Host_ClientCommands (char *fmt, ...)
 {
 	va_list		argptr;
 	char		string[1024];
-	
+
 	va_start (argptr,fmt);
 	vsprintf (string, fmt,argptr);
 	va_end (argptr);
-	
+
 	MSG_WriteByte (&host_client->message, svc_stufftext);
 	MSG_WriteString (&host_client->message, string);
 }
@@ -376,7 +378,7 @@ void SV_DropClient (qboolean crash)
 			MSG_WriteByte (&host_client->message, svc_disconnect);
 			NET_SendMessage (host_client->netconnection, &host_client->message);
 		}
-	
+
 		if (host_client->edict && host_client->spawned)
 		{
 		// call the prog function for removing a client
@@ -469,7 +471,7 @@ void Host_ShutdownServer(qboolean crash)
 	while (count);
 
 // make sure all the clients know we're disconnecting
-	buf.data = message;
+	buf.data = (byte *)message;
 	buf.maxsize = 4;
 	buf.cursize = 0;
 	MSG_WriteByte(&buf, svc_disconnect);
@@ -505,8 +507,9 @@ extern float crosshair_offset_step;
 void Host_ClearMemory (void)
 {
 	Con_DPrintf ("Clearing memory\n");
-	D_FlushCaches ();
+
 	Mod_ClearAll ();
+
 	if (host_hunklevel)
 		Hunk_FreeToLowMark (host_hunklevel);
 
@@ -527,6 +530,7 @@ void Host_ClearMemory (void)
 	crosshair_offset_step = 0;
 	cur_spread = 0;
 	Hitmark_Time = 0;
+
 }
 
 
@@ -542,29 +546,24 @@ Returns false if the time is too short to run a frame
 */
 qboolean Host_FilterTime (float time)
 {
-	float maxfps; //johnfitz
-
 	realtime += time;
 
-	//johnfitz -- max fps cvar
-	maxfps = CLAMP (10.f, host_maxfps.value, 1000.f);
-	if (!cls.timedemo && realtime - oldrealtime < 1.0/maxfps)
+   if (cl_maxfps.value < 1) Cvar_SetValue("cl_maxfps", 30);
+   if (!cls.timedemo && realtime - oldrealtime < 1.0/cl_maxfps.value)
 		return false;		// framerate is too high
-	//johnfitz
 
 	host_frametime = realtime - oldrealtime;
 	oldrealtime = realtime;
 
-	if (host_framerate.value > 0)
+	//johnfitz -- host_timescale is more intuitive than host_framerate
+	if (host_timescale.value > 0)
+		host_frametime *= host_timescale.value;
+	//johnfitz
+	else if (host_framerate.value > 0)
 		host_frametime = host_framerate.value;
-	else
-	{	// don't allow really long or short frames
-		if (host_frametime > 0.1)
-			host_frametime = 0.1;
-		if (host_frametime < 0.001)
-			host_frametime = 0.001;
-	}
-	
+	else // don't allow really long or short frames
+		host_frametime = CLAMP (0.001, host_frametime, 0.1); //johnfitz -- use CLAMP
+
 	return true;
 }
 
@@ -596,68 +595,20 @@ Host_ServerFrame
 
 ==================
 */
-#ifdef FPS_20
-
-void _Host_ServerFrame (void)
-{
-// run the world state	
-	pr_global_struct->frametime = host_frametime;
-
-// read client messages
-	SV_RunClients ();
-	
-// move things around and think
-// always pause in single player if in console or menus
-	if (!sv.paused && (svs.maxclients > 1 || key_dest == key_game) )
-		SV_Physics ();
-}
-
 void Host_ServerFrame (void)
 {
-	float	save_host_frametime;
-	float	temp_host_frametime;
-
-// run the world state	
+// run the world state
 	pr_global_struct->frametime = host_frametime;
 
 // set the time and clear the general datagram
 	SV_ClearDatagram ();
-	
-// check for new clients
-	SV_CheckForNewClients ();
 
-	temp_host_frametime = save_host_frametime = host_frametime;
-	while(temp_host_frametime > (1.0/72.0))
-	{
-		if (temp_host_frametime > 0.05)
-			host_frametime = 0.05;
-		else
-			host_frametime = temp_host_frametime;
-		temp_host_frametime -= host_frametime;
-		_Host_ServerFrame ();
-	}
-	host_frametime = save_host_frametime;
-
-// send all messages to the clients
-	SV_SendClientMessages ();
-}
-
-#else
-
-void Host_ServerFrame (void)
-{
-// run the world state	
-	pr_global_struct->frametime = host_frametime;
-
-// set the time and clear the general datagram
-	SV_ClearDatagram ();
-	
 // check for new clients
 	SV_CheckForNewClients ();
 
 // read client messages
 	SV_RunClients ();
-	
+
 // move things around and think
 // always pause in single player if in console or menus
 	if (!sv.paused && (svs.maxclients > 1 || key_dest == key_game) )
@@ -666,9 +617,6 @@ void Host_ServerFrame (void)
 // send all messages to the clients
 	SV_SendClientMessages ();
 }
-
-#endif
-
 
 /*
 ==================
@@ -685,15 +633,19 @@ void _Host_Frame (float time)
 	int			pass1, pass2, pass3;
 
 	if (setjmp (host_abortserver) )
+	{
 		return;			// something bad happened, or the server disconnected
-
+	}
+	
 // keep the random time dependent
 	rand ();
-	
+
 // decide the simulation time
 	if (!Host_FilterTime (time))
+	{
 		return;			// don't run too fast, or packets will flood out
-		
+	}
+
 // get new key events
 	Sys_SendKeyEvents ();
 
@@ -708,7 +660,7 @@ void _Host_Frame (float time)
 // if running the server locally, make intentions now
 	if (sv.active)
 		CL_SendCmd ();
-	
+
 //-------------------
 //
 // server operations
@@ -717,10 +669,8 @@ void _Host_Frame (float time)
 
 // check for commands typed to the host
 	Host_GetConsoleCommands ();
-	
 	if (sv.active)
 		Host_ServerFrame ();
-
 //-------------------
 //
 // client operations
@@ -739,16 +689,12 @@ void _Host_Frame (float time)
 	{
 		CL_ReadFromServer ();
 	}
-
 // update video
 	if (host_speeds.value)
 		time1 = Sys_FloatTime ();
-		
 	SCR_UpdateScreen ();
-
 	if (host_speeds.value)
 		time2 = Sys_FloatTime ();
-		
 // update audio
 	if (cls.signon == SIGNONS)
 	{
@@ -757,8 +703,6 @@ void _Host_Frame (float time)
 	}
 	else
 		S_Update (vec3_origin, vec3_origin, vec3_origin, vec3_origin);
-	
-	CDAudio_Update();
 
 	if (host_speeds.value)
 	{
@@ -769,9 +713,16 @@ void _Host_Frame (float time)
 		Con_Printf ("%3i tot %3i server %3i gfx %3i snd\n",
 					pass1+pass2+pass3, pass1, pass2, pass3);
 	}
-	
+
+	// Debug log free memory
+	// if ((host_framecount % 120) == 0) Con_Printf ("%.2fkB free \n", pspSdkTotalFreeUserMemSize()/1024.f);
+
+	//frame speed counter
+	fps_count++;//muff
 	host_framecount++;
 }
+
+
 
 void Host_Frame (float time)
 {
@@ -785,17 +736,17 @@ void Host_Frame (float time)
 		_Host_Frame (time);
 		return;
 	}
-	
 	time1 = Sys_FloatTime ();
 	_Host_Frame (time);
-	time2 = Sys_FloatTime ();	
-	
+	time2 = Sys_FloatTime ();
+
 	timetotal += time2 - time1;
 	timecount++;
-	
-	if (timecount < 1000)
-		return;
 
+	if (timecount < 1000)
+	{
+		return;
+	}
 	m = timetotal*1000/timecount;
 	timecount = 0;
 	timetotal = 0;
@@ -805,7 +756,6 @@ void Host_Frame (float time)
 		if (svs.clients[i].active)
 			c++;
 	}
-
 	Con_Printf ("serverprofile: %2i clients %2i msec\n",  c,  m);
 }
 
@@ -820,7 +770,7 @@ void Host_InitVCR (quakeparms_t *parms)
 {
 	int		i, len, n;
 	char	*p;
-	
+
 	if (COM_CheckParm("-playback"))
 	{
 		if (com_argc != 2)
@@ -835,12 +785,12 @@ void Host_InitVCR (quakeparms_t *parms)
 			Sys_Error("Invalid signature in vcr file\n");
 
 		Sys_FileRead (vcrFile, &com_argc, sizeof(int));
-		com_argv = malloc(com_argc * sizeof(char *));
+		com_argv = Q_malloc(com_argc * sizeof(char *));
 		com_argv[0] = parms->argv[0];
 		for (i = 0; i < com_argc; i++)
 		{
 			Sys_FileRead (vcrFile, &len, sizeof(int));
-			p = malloc(len);
+			p = Q_malloc(len);
 			Sys_FileRead (vcrFile, p, len);
 			com_argv[i+1] = p;
 		}
@@ -871,17 +821,45 @@ void Host_InitVCR (quakeparms_t *parms)
 			Sys_FileWrite(vcrFile, com_argv[i], len);
 		}
 	}
-	
+
 }
 
+void Preload (void)
+{
+	Mod_ForName ("models/player.mdl", true);
+
+	// Body
+	Mod_ForName("models/ai/zb%.mdl", true);
+	Mod_ForName("models/ai/zbc%.mdl", true);
+
+	// Full Model
+	Mod_ForName ("models/ai/zfull.mdl",true);
+	Mod_ForName ("models/ai/zcfull.mdl",true);
+
+	// Head
+	Mod_ForName ("models/ai/zh^.mdl",true);
+	Mod_ForName ("models/ai/zhc^.mdl",true);
+
+	// Left Arm
+	Mod_ForName ("models/ai/zal(.mdl",true);
+	Mod_ForName ("models/ai/zalc(.mdl",true);
+
+	// Right Arm
+	Mod_ForName ("models/ai/zar(.mdl",true);
+	Mod_ForName ("models/ai/zarc(.mdl",true);
+}
 /*
 ====================
 Host_Init
 ====================
 */
+#include "cl_slist.h"
+
+void M_Start_Menu_f (void);
 void Host_Init (quakeparms_t *parms)
 {
-	minimum_memory = MINIMUM_MEMORY_LEVELPAK;
+
+	minimum_memory = MINIMUM_MEMORY;
 
 	if (COM_CheckParm ("-minmemory"))
 		parms->memsize = minimum_memory;
@@ -896,70 +874,75 @@ void Host_Init (quakeparms_t *parms)
 
 	Memory_Init (parms->membase, parms->memsize);
 	Cbuf_Init ();
-	Cmd_Init ();	
+	Cmd_Init ();
 	V_Init ();
 	Chase_Init ();
 	Host_InitVCR (parms);
 	COM_Init (parms->basedir);
 	Host_InitLocal ();
 	Key_Init ();
-	Con_Init ();	
-	M_Init ();	
+	Con_Init ();
+	M_Init ();
 	PR_Init ();
 	Mod_Init ();
 	NET_Init ();
 	SV_Init ();
 
-	Con_Printf ("Exe: "__TIME__" "__DATE__"\n");
-	Con_Printf ("%4.1f megabyte heap\n",parms->memsize/ (1024*1024.0));
-	
+#ifdef __PSP__
+	Con_Printf ("PSP NZP v%4.1f (PBP: "__TIME__" "__DATE__")\n", (float)(VERSION));
+	Con_Printf ("%4.1f megabyte PSP application heap \n",1.0f*PSP_HEAP_SIZE_MB);
+	Con_Printf ("PSP Model: %s\n", Sys_GetPSPModel());
+	Con_Printf ("VRAM Size: %i bytes\n", sceGeEdramGetSize());
+#elif __3DS
+	Con_Printf ("3DS NZP v%4.1f (3DSX: "__TIME__" "__DATE__")\n", (float)(VERSION));
+
+	if (new3ds_flag)
+		Con_Printf ("3DS Model: NEW Nintendo 3DS\n");
+	else
+		Con_Printf ("3DS Model: Nintendo 3DS\n");
+#endif // __PSP__, _3DS
+
+	Con_Printf ("%4.1f megabyte Quake hunk \n",parms->memsize/ (1024*1024.0));
+
 	R_InitTextures ();		// needed even for dedicated servers
- 
 	if (cls.state != ca_dedicated)
 	{
 		host_basepal = (byte *)COM_LoadHunkFile ("gfx/palette.lmp");
 		if (!host_basepal)
 			Sys_Error ("Couldn't load gfx/palette.lmp");
+
 		host_colormap = (byte *)COM_LoadHunkFile ("gfx/colormap.lmp");
 		if (!host_colormap)
 			Sys_Error ("Couldn't load gfx/colormap.lmp");
 
-#ifndef _WIN32 // on non win32, mouse comes before video for security reasons
-		IN_Init ();
-#endif
-		VID_Init (host_basepal);
+#ifdef __PSP__
+		host_q2pal = (byte *)COM_LoadHunkFile ("gfx/q2pal.lmp");
+		if (!host_q2pal)
+			Sys_Error ("Couldn't load gfx/q2pal.lmp");
 
+		host_h2pal = (byte *)COM_LoadHunkFile ("gfx/h2pal.lmp");
+		if (!host_h2pal)
+			Sys_Error ("Couldn't load gfx/h2pal.lmp");
+#endif // __PSP__
+
+		IN_Init ();
+		VID_Init (host_basepal);
 		Draw_Init ();
 		SCR_Init ();
 		R_Init ();
-#ifndef	_WIN32
-	// on Win32, sound initialization has to come before video initialization, so we
-	// can put up a popup if the sound hardware is in use
 		S_Init ();
-#else
-
-#ifdef	GLQUAKE
-	// FIXME: doesn't use the new one-window approach yet
-		S_Init ();
-#endif
-
-#endif	// _WIN32
 		CDAudio_Init ();
-		Sbar_Init ();
 		HUD_Init ();
 		CL_Init ();
-#ifdef _WIN32 // on non win32, mouse comes before video for security reasons
-		IN_Init ();
-#endif
 	}
-
+	Preload();
 	Cbuf_InsertText ("exec nzp.rc\n");
 
 	Hunk_AllocName (0, "-HOST_HUNKLEVEL-");
 	host_hunklevel = Hunk_LowMark ();
 
 	host_initialized = true;
-	
+	M_Start_Menu_f();
 	Sys_Printf ("========Nazi Zombies Portable Initialized=========\n");	
 }
 
@@ -975,10 +958,9 @@ to run quit through here before the final handoff to the sys code.
 void Host_Shutdown(void)
 {
 	static qboolean isdown = false;
-	
+
 	if (isdown)
 	{
-		printf ("recursive shutdown\n");
 		return;
 	}
 	isdown = true;
@@ -988,7 +970,14 @@ void Host_Shutdown(void)
 
     Clear_LoadingFill ();
 
-	Host_WriteConfiguration (); 
+	SList_Shutdown();
+
+	Host_WriteConfiguration ();
+
+#ifdef __PSP__
+	if (con_initialized)
+		History_Shutdown ();
+#endif // __PSP__
 
 	CDAudio_Shutdown ();
 	NET_Shutdown ();

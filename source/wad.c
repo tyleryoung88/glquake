@@ -162,6 +162,7 @@ void SwapPic (qpic_t *pic)
 WAD3 Texture Loading for BSP 3.0 Support From Baker		--Diabolickal HLBSP
 =============================================================================
 */
+#ifdef _3DS
 
 #define TEXWAD_MAXIMAGES 16384
 
@@ -315,3 +316,4 @@ byte *WAD3_LoadTexture(miptex_t *mt) {
    }
    return NULL;
 }
+#endif // _3DS

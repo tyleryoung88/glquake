@@ -60,6 +60,7 @@ void (*vid_menukeyfn)(int key);
 enum 
 {
 	m_none, 
+	m_start,
 	m_main, 
 	m_paused_menu, 
 	m_singleplayer, 
@@ -83,6 +84,8 @@ enum
 	m_search, 
 	m_slist,
 } m_state;
+
+void M_Start_Menu_f (void);
 void M_Menu_Main_f (void);
 	void M_Menu_SinglePlayer_f (void);
 		void M_Menu_CustomMaps_f (void);
@@ -235,6 +238,41 @@ void M_Load_Menu_Pics ()
 	menu_ch 	= Draw_CachePic("gfx/menu/christmas_special");
 	menu_custom = Draw_CachePic("gfx/menu/custom");
 }
+
+void M_Start_Menu_f ()
+{
+	//Load_Achivements();
+	M_Load_Menu_Pics();
+	key_dest = key_menu;
+	m_state = m_start;
+	m_entersound = true;
+	//loadingScreen = 0;
+}
+
+static void M_Start_Menu_Draw ()
+{
+	// Background
+	menu_bk = Draw_CachePic("gfx/menu/menu_background");
+	Draw_StretchPic(0, 0, menu_bk, 400, 240);
+
+	// Fill black to make everything easier to see
+	Draw_FillByColor(0, 0, vid.width, vid.height, 0, 0, 0, 102);
+
+	Draw_ColoredStringCentered(vid.height - 64, "Press A to Start", 255, 0, 0, 255, 1);
+}
+
+void M_Start_Key (int key)
+{
+	switch (key)
+	{
+		case K_AUX1:
+			S_LocalSound ("sounds/menu/enter.wav");
+			//Cbuf_AddText("cd playstring tensioned_by_the_damned 1\n");
+			Cbuf_AddText("togglemenu\n");
+			break;
+	}
+}
+
 
 int m_save_demonum;
 
@@ -2209,7 +2247,6 @@ void M_Init (void)
 		game_build_date = "version.txt not found.";
 	}
 
-	//M_Load_Menu_Pics();
 	Map_Finder();
 }
 
@@ -2243,6 +2280,10 @@ void M_Draw (void)
 	switch (m_state)
 	{
 	case m_none:
+		break;
+
+	case m_start:
+		M_Start_Menu_Draw();
 		break;
 
 	case m_paused_menu:
@@ -2315,6 +2356,10 @@ void M_Keydown (int key)
 	{
 	case m_none:
 		return;
+
+	case m_start:
+		M_Start_Key (key);
+		break;
 
 	case m_paused_menu:
 		M_Paused_Menu_Key (key);
