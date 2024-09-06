@@ -127,6 +127,8 @@ void SNDDMA_Shutdown(void);
 #define	MAX_CHANNELS			128
 #define	MAX_DYNAMIC_CHANNELS	8
 
+#define	MAX_SFX		512
+
 
 extern	channel_t   channels[MAX_CHANNELS];
 // 0 to MAX_DYNAMIC_CHANNELS-1	= normal entity sounds
@@ -154,6 +156,7 @@ extern vec_t sound_nominal_clip_dist;
 
 extern	cvar_t loadas8bit;
 extern	cvar_t bgmvolume;
+extern	cvar_t bgmtype; 
 extern	cvar_t volume;
 
 extern qboolean	snd_initialized;
