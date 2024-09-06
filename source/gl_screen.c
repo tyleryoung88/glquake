@@ -1422,30 +1422,6 @@ void SCR_BringDownConsole (void)
 	VID_SetPalette (host_basepal);
 }
 
-void SCR_TileClear (void)
-{
-	if (r_refdef.vrect.x > 0) {
-		// left
-		Draw_TileClear (0, 0, r_refdef.vrect.x, vid.height - sb_lines);
-		// right
-		Draw_TileClear (r_refdef.vrect.x + r_refdef.vrect.width, 0, 
-			vid.width - r_refdef.vrect.x + r_refdef.vrect.width, 
-			vid.height - sb_lines);
-	}
-	if (r_refdef.vrect.y > 0) {
-		// top
-		Draw_TileClear (r_refdef.vrect.x, 0, 
-			r_refdef.vrect.x + r_refdef.vrect.width, 
-			r_refdef.vrect.y);
-		// bottom
-		Draw_TileClear (r_refdef.vrect.x,
-			r_refdef.vrect.y + r_refdef.vrect.height, 
-			r_refdef.vrect.width, 
-			vid.height - sb_lines - 
-			(r_refdef.vrect.height + r_refdef.vrect.y));
-	}
-}
-
 /*
 ==================
 SCR_UpdateScreen

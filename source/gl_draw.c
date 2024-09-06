@@ -34,7 +34,6 @@ cvar_t		gl_picmip = {"gl_picmip", "0"};
 byte		*draw_chars;				// 8*8 graphic characters
 qpic_t		*sniper_scope;
 
-qpic_t		*draw_disc;
 qpic_t		*draw_backtile;
 
 int			translate_texture;
@@ -196,48 +195,6 @@ byte		menuplyr_pixels[4096];
 
 int		pic_texels;
 int		pic_count;
-
-qpic_t *Draw_PicFromWad (char *name)
-{
-	qpic_t	*p;
-	glpic_t	*gl;
-
-	p = W_GetLumpName (name);
-	gl = (glpic_t *)p->data;
-
-	// load little ones into the scrap
-	if (p->width < 64 && p->height < 64)
-	{
-		int		x=0, y=0;
-		int		i, j, k;
-		int		texnum;
-
-		texnum = Scrap_AllocBlock (p->width, p->height, &x, &y);
-		scrap_dirty = true;
-		k = 0;
-		for (i=0 ; i<p->height ; i++)
-			for (j=0 ; j<p->width ; j++, k++)
-				scrap_texels[texnum][(y+i)*BLOCK_WIDTH + x + j] = p->data[k];
-		texnum += scrap_texnum;
-		gl->texnum = texnum;
-		gl->sl = (x+0.01)/(float)BLOCK_WIDTH;
-		gl->sh = (x+p->width-0.01)/(float)BLOCK_WIDTH;
-		gl->tl = (y+0.01)/(float)BLOCK_WIDTH;
-		gl->th = (y+p->height-0.01)/(float)BLOCK_WIDTH;
-
-		pic_count++;
-		pic_texels += p->width*p->height;
-	}
-	else
-	{
-		gl->texnum = GL_LoadPicTexture (p);
-		gl->sl = 0;
-		gl->sh = 1;
-		gl->tl = 0;
-		gl->th = 1;
-	}
-	return p;
-}
 
 /*
 ================
@@ -642,7 +599,7 @@ void Draw_Pic (int x, int y, qpic_t *pic)
 Draw_ColoredStretchPic
 =============
 */
-void Draw_ColoredStretchPic (int x, int y, qpic_t *pic, int x_value, int y_value, float r, float g , float b, float a)
+void Draw_ColoredStretchPic (int x, int y, qpic_t *pic, int x_value, int y_value, int r, int g, int b, int a)
 {
 	glpic_t			*gl;
 
@@ -813,7 +770,7 @@ Draw_ConsoleBackground
 */
 void Draw_ConsoleBackground (int lines)
 {
-	Draw_Fill(0, 0, vid.width, lines, 0, 0, 0, 255);
+	Draw_FillByColor(0, 0, vid.width, lines, 0, 0, 0, 255);
 }
 
 
@@ -904,19 +861,7 @@ Draw_FillByColor
 Fills a box of pixels with a single color
 =============
 */
-void Draw_FillByColor (int x, int y, int w, int h, float r, float g, float b, float a)
-{
-	Draw_Fill(x, y, w, h, r, g, b, a);
-}
-
-/*
-=============
-Draw_Fill
-
-Fills a box of pixels with a single color
-=============
-*/
-void Draw_Fill (int x, int y, int w, int h, float r, float g, float b, float a)
+void Draw_FillByColor (int x, int y, int w, int h, int r, int g, int b, int a)
 {
 	glDisable (GL_TEXTURE_2D);
 	glEnable (GL_BLEND); //johnfitz -- for alpha
@@ -1290,36 +1235,6 @@ void Draw_FadeScreen (void)
 }
 
 //=============================================================================
-
-/*
-================
-Draw_BeginDisc
-
-Draws the little blue disc in the corner of the screen.
-Call before beginning any disc IO.
-================
-*/
-void Draw_BeginDisc (void)
-{
-	if (!draw_disc)
-		return;
-	glDrawBuffer  (GL_FRONT);
-	Draw_Pic (vid.width - 24, 0, draw_disc);
-	glDrawBuffer  (GL_BACK);
-}
-
-
-/*
-================
-Draw_EndDisc
-
-Erases the disc icon.
-Call after completing any disc IO
-================
-*/
-void Draw_EndDisc (void)
-{
-}
 
 /*
 ================
