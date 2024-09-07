@@ -64,6 +64,16 @@ int			con_notifylines;		// scan lines to clear for notify lines
 
 extern void M_Menu_Main_f (void);
 
+#define MAXGAMEDIRLEN	1000
+char debuglogfile[MAXGAMEDIRLEN + 1];
+
+#ifdef __PSP__
+void M_OSK_Draw (void);
+void Con_OSK_f (char *input, char *output, int outlen);
+void Con_OSK_Key(int key);
+void Con_DrawOSK(void);
+#endif // __PSP__
+
 extern qboolean console_enabled;
 /*
 ================
@@ -214,18 +224,16 @@ Con_Init
 */
 void Con_Init (void)
 {
-#define MAXGAMEDIRLEN	1000
-	char	temp[MAXGAMEDIRLEN+1];
-	char	*t2 = "/qconsole.log";
+	char	*t2 = "/condebug.log";
 
-	con_debuglog = 1;//COM_CheckParm("-condebug");
+	con_debuglog = COM_CheckParm("-condebug");
 
 	if (con_debuglog)
 	{
 		if (strlen (com_gamedir) < (MAXGAMEDIRLEN - strlen (t2)))
 		{
-			sprintf (temp, "%s%s", com_gamedir, t2);
-			unlink (temp);
+			sprintf (debuglogfile, "%s%s", com_gamedir, t2);
+			unlink (debuglogfile);
 		}
 	}
 
@@ -392,7 +400,7 @@ void Con_Printf (char *fmt, ...)
 
 // log all messages to file
 	if (con_debuglog)
-		Con_DebugLog(va("%s/qconsole.log",com_gamedir), "%s", msg);
+		Con_DebugLog(debuglogfile, "%s", msg);
 
 	if (!con_initialized)
 		return;
@@ -616,8 +624,32 @@ void Con_DrawConsole (int lines, qboolean drawinput)
 // draw the input prompt, user text, and cursor if desired
 	if (drawinput)
 		Con_DrawInput ();
+
+#ifdef __PSP__
+	Con_DrawOSK();	
+#endif // __PSP__
 }
 
+#ifdef __PSP__
+static qboolean	scr_osk_active = false;
+
+
+void Con_SetOSKActive(qboolean active) 
+{
+	scr_osk_active = active;	
+}
+
+qboolean Con_isSetOSKActive(void) 
+{
+	return scr_osk_active;
+}
+
+void Con_DrawOSK(void) {
+	if (scr_osk_active) {
+		M_OSK_Draw();
+	}
+}
+#endif // __PSP__
 
 /*
 ==================

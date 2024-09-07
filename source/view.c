@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 See the GNU General Public License for more details.
 
@@ -21,6 +21,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "quakedef.h"
 #include "r_local.h"
+
+#ifdef __PSP__
+#include <pspgu.h>
+#include <pspmath.h>
+#endif // __PSP__
 
 sfx_t			*cl_sfx_step[4];
 
@@ -66,8 +71,6 @@ cvar_t	v_ipitch_level = {"v_ipitch_level", "0.3", false};
 cvar_t	v_idlescale = {"v_idlescale", "0", false};
 
 cvar_t	crosshair = {"crosshair", "1", true};
-
-cvar_t	gl_cshiftpercent = {"gl_cshiftpercent", "100", false}; //naievil -- wtf is this?
 
 float	v_dmg_time, v_dmg_roll, v_dmg_pitch;
 
@@ -122,7 +125,7 @@ float V_CalcBob (float speed,float which)//0 = regular, 1 = side bobbing
 	float sprint = 1;
 
 	if (cl.stats[STAT_ZOOM] == 2)
-		return;
+		return bob;
 
 	// Bob idle-y, instead of presenting as if in-motion.
 	if (speed < 0.1) {
@@ -131,10 +134,22 @@ float V_CalcBob (float speed,float which)//0 = regular, 1 = side bobbing
 		else
 			speed = 0.25;
 
+#ifdef PSP_VFPU
+
 		if (which == 0)
-            		bob = cl_bobup.value * 10 * speed * (sprint * sprint) * sin(cl.time * 3.25 * sprint);
-        	else
-            		bob = cl_bobside.value * 50 * speed * (sprint * sprint * sprint) * sin((cl.time * sprint) - (M_PI * 0.25));
+			bob = cl_bobup.value * 10 * speed * (sprint * sprint) * vfpu_sinf(cl.time * 3.25 * sprint);
+		else
+			bob = cl_bobside.value * 50 * speed * (sprint * sprint * sprint) * vfpu_sinf((cl.time * sprint) - (M_PI * 0.25));
+
+#else
+
+		if (which == 0)
+			bob = cl_bobup.value * 10 * speed * (sprint * sprint) * sin(cl.time * 3.25 * sprint);
+		else
+			bob = cl_bobside.value * 50 * speed * (sprint * sprint * sprint) * sin((cl.time * sprint) - (M_PI * 0.25));
+
+#endif // PSP_VFPU
+
 	} 
 	// Normal walk/sprint bob.
 	else {
@@ -142,10 +157,23 @@ float V_CalcBob (float speed,float which)//0 = regular, 1 = side bobbing
 			sprint = 1.8; //this gets sprinting speed in comparison to walk speed per weapon
 
 		//12.048 -> 4.3 = 100 -> 36ish, so replace 100 with 36
+
+#ifdef PSP_VFPU
+
 		if(which == 0)
-			bob = cl_bobup.value * 24 * speed * (sprint * sprint) * sin((cl.time * 12.5 * sprint));//Pitch Bobbing 10
+			bob = cl_bobup.value * 36 * speed * (sprint * sprint) * vfpu_sinf((cl.time * 12.5 * sprint));//Pitch Bobbing 10
 		else if(which == 1)
-			bob = cl_bobside.value * 24 * speed * (sprint * sprint * sprint) * sin((cl.time * 6.25 * sprint) - (M_PI * 0.25));//Yaw Bobbing 5
+			bob = cl_bobside.value * 36 * speed * (sprint * sprint * sprint) * vfpu_sinf((cl.time * 6.25 * sprint) - (M_PI * 0.25));//Yaw Bobbing 5
+
+#else
+
+		if(which == 0)
+			bob = cl_bobup.value * 36 * speed * (sprint * sprint) * sin((cl.time * 12.5 * sprint));//Pitch Bobbing 10
+		else if(which == 1)
+			bob = cl_bobside.value * 36 * speed * (sprint * sprint * sprint) * sin((cl.time * 6.25 * sprint) - (M_PI * 0.25));//Yaw Bobbing 5
+
+#endif // PSP_VFPU 
+
 	}
 
 	return bob;
@@ -197,41 +225,64 @@ float V_CalcVBob(float speed, float which)
 
 	if(sprint == 1)
 	{
+		#ifdef PSP_VFPU
+		if(which == 0)
+			bob = speed * 8.6 * (1/sprint) * vfpu_sinf((cl.time * 12.5 * sprint));//10
+		else if(which == 1)
+			bob = speed * 8.6 * (1/sprint) * vfpu_sinf((cl.time * 6.25 * sprint) - (M_PI * 0.25));//5
+		else if(which == 2)
+			bob = speed * 8.6 * (1/sprint) * vfpu_sinf((cl.time * 6.25 * sprint) - (M_PI * 0.25));//5
+		#else
 		if(which == 0)
 			bob = speed * 8.6 * (1/sprint) * sin((cl.time * 12.5 * sprint));//10
 		else if(which == 1)
 			bob = speed * 8.6 * (1/sprint) * sin((cl.time * 6.25 * sprint) - (M_PI * 0.25));//5
 		else if(which == 2)
 			bob = speed * 8.6 * (1/sprint) * sin((cl.time * 6.25 * sprint) - (M_PI * 0.25));//5
+		#endif
 	}
 	else
 	{
+		#ifdef PSP_VFPU
+		if(which == 0)
+			bob = speed * 8.6 * (1/sprint) * vfpu_cosf((cl.time * 6.25 * sprint));
+		else if(which == 1)
+			bob = speed * 8.6 * (1/sprint) * vfpu_cosf((cl.time * 12.5 * sprint));
+		else if(which == 2)
+			bob = speed * 8.6 * (1/sprint) * vfpu_cosf((cl.time * 6.25 * sprint));
+		#else
 		if(which == 0)
 			bob = speed * 8.6 * (1/sprint) * cos((cl.time * 6.25 * sprint));
 		else if(which == 1)
 			bob = speed * 8.6 * (1/sprint) * cos((cl.time * 12.5 * sprint));
 		else if(which == 2)
 			bob = speed * 8.6 * (1/sprint) * cos((cl.time * 6.25 * sprint));
+		#endif
 	}
 
 
 	if(speed > 0.1 && which == 0)
 	{
+		#ifdef PSP_VFPU
+		if(canStep && vfpu_sinf(cl.time * 12.5 * sprint) < -0.8)
+		#else
 		if(canStep && sin(cl.time * 12.5 * sprint) < -0.8)
+		#endif
 		{
 			PlayStepSound();
 			canStep = 0;
 		}
+		#ifdef PSP_VFPU
+		if(vfpu_sinf(cl.time * 12.5 * sprint) > 0.9)
+		#else
 		if(sin(cl.time * 12.5 * sprint) > 0.9)
+		#endif
 		{
 			canStep = 1;
 		}
 	}
 	return bob;
 }
-
-//=============================================================================
-
 
 //=============================================================================
 
@@ -273,7 +324,7 @@ If the user is adjusting pitch manually, either with lookup/lookdown,
 mlook and mouse, or klook and keyboard, pitch drifting is constantly stopped.
 
 Drifting is enabled when the center view key is hit, mlook is released and
-lookspring is non 0, or when 
+lookspring is non 0, or when
 ===============
 */
 void V_DriftPitch (void)
@@ -290,18 +341,18 @@ void V_DriftPitch (void)
 // don't count small mouse motion
 	if (cl.nodrift)
 	{
-		if ( fabs(cl.cmd.forwardmove) < cl_forwardspeed)
+		if ( fabsf(cl.cmd.forwardmove) < cl_forwardspeed)
 			cl.driftmove = 0;
 		else
 			cl.driftmove += host_frametime;
-	
+
 		if ( cl.driftmove > v_centermove.value)
 		{
 			V_StartPitchDrift ();
 		}
 		return;
 	}
-	
+
 	delta = cl.idealpitch - cl.viewangles[PITCH];
 
 	if (!delta)
@@ -312,7 +363,7 @@ void V_DriftPitch (void)
 
 	move = host_frametime * cl.pitchvel;
 	cl.pitchvel += host_frametime * v_centerspeed.value;
-	
+
 //Con_Printf ("move: %f (%f)\n", move, host_frametime);
 
 	if (delta > 0)
@@ -340,20 +391,20 @@ void V_DriftPitch (void)
 
 
 /*
-============================================================================== 
- 
-						PALETTE FLASHES 
- 
-============================================================================== 
-*/ 
- 
- 
+==============================================================================
+
+						PALETTE FLASHES
+
+==============================================================================
+*/
+
+
 cshift_t	cshift_empty = { {130,80,50}, 0 };
 cshift_t	cshift_water = { {130,80,50}, 128 };
 cshift_t	cshift_slime = { {0,25,5}, 150 };
 cshift_t	cshift_lava = { {255,80,0}, 150 };
 
-cvar_t		v_gamma = {"gamma", "1.0", true};
+cvar_t		v_gamma = {"gamma", "1", true};
 
 byte		gammatable[256];	// palette is sent through this
 
@@ -387,90 +438,17 @@ void BuildGammaTable (float g)
 V_CheckGamma
 =================
 */
+static float oldgammavalue;
 qboolean V_CheckGamma (void)
 {
-	static float oldgammavalue;
-	
 	if (v_gamma.value == oldgammavalue)
 		return false;
 	oldgammavalue = v_gamma.value;
-	
+
 	BuildGammaTable (v_gamma.value);
 	vid.recalc_refdef = 1;				// force a surface cache flush
-	
+
 	return true;
-}
-
-
-
-/*
-===============
-V_ParseDamage
-===============
-*/
-void V_ParseDamage (void)
-{
-	int		armor, blood;
-	vec3_t	from;
-	int		i;
-	vec3_t	forward, right, up;
-	entity_t	*ent;
-	float	side;
-	float	count;
-	
-	armor = MSG_ReadByte ();
-	blood = MSG_ReadByte ();
-	for (i=0 ; i<3 ; i++)
-		from[i] = MSG_ReadCoord ();
-
-	count = blood*0.5 + armor*0.5;
-	if (count < 10)
-		count = 10;
-
-	cl.faceanimtime = cl.time + 0.2;		// but sbar face into pain frame
-
-	cl.cshifts[CSHIFT_DAMAGE].percent += 3*count;
-	if (cl.cshifts[CSHIFT_DAMAGE].percent < 0)
-		cl.cshifts[CSHIFT_DAMAGE].percent = 0;
-	if (cl.cshifts[CSHIFT_DAMAGE].percent > 150)
-		cl.cshifts[CSHIFT_DAMAGE].percent = 150;
-
-	if (armor > blood)		
-	{
-		cl.cshifts[CSHIFT_DAMAGE].destcolor[0] = 200;
-		cl.cshifts[CSHIFT_DAMAGE].destcolor[1] = 100;
-		cl.cshifts[CSHIFT_DAMAGE].destcolor[2] = 100;
-	}
-	else if (armor)
-	{
-		cl.cshifts[CSHIFT_DAMAGE].destcolor[0] = 220;
-		cl.cshifts[CSHIFT_DAMAGE].destcolor[1] = 50;
-		cl.cshifts[CSHIFT_DAMAGE].destcolor[2] = 50;
-	}
-	else
-	{
-		cl.cshifts[CSHIFT_DAMAGE].destcolor[0] = 255;
-		cl.cshifts[CSHIFT_DAMAGE].destcolor[1] = 0;
-		cl.cshifts[CSHIFT_DAMAGE].destcolor[2] = 0;
-	}
-
-//
-// calculate view angle kicks
-//
-	ent = &cl_entities[cl.viewentity];
-	
-	VectorSubtract (from, ent->origin, from);
-	VectorNormalize (from);
-	
-	AngleVectors (ent->angles, forward, right, up);
-
-	side = DotProduct (from, right);
-	v_dmg_roll = count*side*v_kickroll.value;
-	
-	side = DotProduct (from, forward);
-	v_dmg_pitch = count*side*v_kickpitch.value;
-
-	v_dmg_time = v_kicktime.value;
 }
 
 
@@ -512,23 +490,41 @@ Underwater, lava, etc each has a color shift
 */
 void V_SetContentsColor (int contents)
 {
+	//int s, e, r, g, b, a;
 	switch (contents)
 	{
 	case CONTENTS_EMPTY:
 	case CONTENTS_SOLID:
 		cl.cshifts[CSHIFT_CONTENTS] = cshift_empty;
 		break;
+
 	case CONTENTS_LAVA:
 		cl.cshifts[CSHIFT_CONTENTS] = cshift_lava;
 		break;
+
 	case CONTENTS_SLIME:
 		cl.cshifts[CSHIFT_CONTENTS] = cshift_slime;
 		break;
-	default:
-		cl.cshifts[CSHIFT_CONTENTS] = cshift_water;
-	}
-}
 
+	default:
+        cl.cshifts[CSHIFT_CONTENTS] = cshift_water;
+        break;
+	 }
+/*
+	s = 0;
+    e = 400;
+    r = 130;
+    g = 80;
+    b = 50;
+
+    a = r_wateralpha.value * 255.0f;
+    if (contents!=CONTENTS_EMPTY||contents!=CONTENTS_SOLID)
+    {
+    sceGuEnable(GU_FOG);
+    sceGuFog (s, e, GU_COLOR( r * 0.01f, g * 0.01f, b * 0.01f, a * 0.01f));
+    }
+*/
+}
 
 /*
 =============
@@ -584,9 +580,12 @@ void V_CalcBlend (void)
 
 	for (j=0 ; j<NUM_CSHIFTS ; j++)
 	{
-		if (!gl_polyblend.value) {
+#ifdef __PSP__
+		if (!r_polyblend.value)
+#else
+		if (!gl_polyblend.value)
+#endif // __PSP__
 			continue;
-		}
 
 		a2 = cl.cshifts[j].percent / 255.0;
 //		a2 = cl.cshifts[j].percent/255.0;
@@ -1270,26 +1269,26 @@ void V_CalcRefdef (void)
 
 	VectorAdd (r_refdef.viewangles, cl.gun_kick, r_refdef.viewangles);
 
-// smooth out stair step ups
-if (cl.onground && ent->origin[2] - oldz > 0)
-{
-	float steptime;
+	// smooth out stair step ups
+	if (cl.onground && ent->origin[2] - oldz > 0)
+	{
+		float steptime;
 
-	steptime = cl.time - cl.oldtime;
-	if (steptime < 0)
-//FIXME		I_Error ("steptime < 0");
-		steptime = 0;
+		steptime = cl.time - cl.oldtime;
+		if (steptime < 0)
+	//FIXME		I_Error ("steptime < 0");
+			steptime = 0;
 
-	oldz += steptime * 80;
-	if (oldz > ent->origin[2])
+		oldz += steptime * 80;
+		if (oldz > ent->origin[2])
+			oldz = ent->origin[2];
+		if (ent->origin[2] - oldz > 12)
+			oldz = ent->origin[2] - 12;
+		r_refdef.vieworg[2] += oldz - ent->origin[2];
+		view->origin[2] += oldz - ent->origin[2];
+	}
+	else
 		oldz = ent->origin[2];
-	if (ent->origin[2] - oldz > 12)
-		oldz = ent->origin[2] - 12;
-	r_refdef.vieworg[2] += oldz - ent->origin[2];
-	view->origin[2] += oldz - ent->origin[2];
-}
-else
-	oldz = ent->origin[2];
 
 	if (chase_active.value)
 		Chase_Update ();
@@ -1663,40 +1662,39 @@ void V_RenderView (void)
 
 	if (cl.intermission)
 	{	// intermission / finale rendering
-		V_CalcIntermissionRefdef ();	
+		V_CalcIntermissionRefdef ();
 	}
 	else
 	{
-		if (!cl.paused /* && (sv.maxclients > 1 || key_dest == key_game) */ )
+		if (!cl.paused  && (cl.maxclients > 1 || key_dest == key_game)  )
+		{
 			V_CalcRefdef ();
+		}
 	}
-
 	R_PushDlights ();
 
-	if (lcd_x.value)
+	if (lcd_x.value)//blubs: psp doesn't appear to use these
 	{
 		//
 		// render two interleaved views
 		//
 		int		i;
-
+		
 		vid.rowbytes <<= 1;
 		vid.aspect *= 0.5;
-
+		
 		r_refdef.viewangles[YAW] -= lcd_yaw.value;
 		for (i=0 ; i<3 ; i++)
 			r_refdef.vieworg[i] -= right[i]*lcd_x.value;
 		R_RenderView ();
-
+		
 		vid.buffer += vid.rowbytes>>1;
-
+		
 		R_PushDlights ();
-
 		r_refdef.viewangles[YAW] += lcd_yaw.value*2;
 		for (i=0 ; i<3 ; i++)
 			r_refdef.vieworg[i] += 2*right[i]*lcd_x.value;
 		R_RenderView ();
-
 		vid.buffer -= vid.rowbytes>>1;
 
 		r_refdef.vrect.height <<= 1;
@@ -1708,7 +1706,9 @@ void V_RenderView (void)
 	{
 		R_RenderView ();
 	}
-		
+
+	//Blub's debug tracemove: to use: uncomment this, go above and uncomment the functions used above this one, and go in qc and make the player spawn an entity of .enemy
+	//tryLine();
 }
 
 //============================================================================
@@ -1720,7 +1720,7 @@ V_Init
 */
 void V_Init (void)
 {
-	Cmd_AddCommand ("v_cshift", V_cshift_f);	
+	Cmd_AddCommand ("v_cshift", V_cshift_f);
 	Cmd_AddCommand ("bf", V_BonusFlash_f);
 	Cmd_AddCommand ("centerview", V_StartPitchDrift);
 
@@ -1739,7 +1739,6 @@ void V_Init (void)
 
 	Cvar_RegisterVariable (&v_idlescale);
 	Cvar_RegisterVariable (&crosshair);
-	Cvar_RegisterVariable (&gl_cshiftpercent);
 
 	Cvar_RegisterVariable (&scr_ofsx);
 	Cvar_RegisterVariable (&scr_ofsy);
@@ -1750,12 +1749,17 @@ void V_Init (void)
 	Cvar_RegisterVariable (&cl_bobcycle);
 	Cvar_RegisterVariable (&cl_bobup);
 
+	Cvar_RegisterVariable (&cl_sidebobbing);
+	Cvar_RegisterVariable (&cl_bobside);
+	Cvar_RegisterVariable (&cl_bobsidecycle);
+	Cvar_RegisterVariable (&cl_bobsideup);
+
 	Cvar_RegisterVariable (&v_kicktime);
 	Cvar_RegisterVariable (&v_kickroll);
-	Cvar_RegisterVariable (&v_kickpitch);	
-	
+	Cvar_RegisterVariable (&v_kickpitch);
+
+	BuildGammaTable (1.0);	// no gamma yet
 	Cvar_RegisterVariable (&v_gamma);
-	BuildGammaTable (v_gamma.value);	// no gamma yet
 }
 
 

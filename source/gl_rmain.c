@@ -84,8 +84,6 @@ cvar_t	r_mirroralpha = {"r_mirroralpha","1"};
 cvar_t	r_wateralpha = {"r_wateralpha","1"};
 cvar_t	r_dynamic = {"r_dynamic","1"};
 cvar_t	r_novis = {"r_novis","0"};
-cvar_t	r_lerpmodels = {"r_lerpmodels", "1"};
-cvar_t  r_lerpmove = {"r_lerpmove", "1"};
 cvar_t 	r_skyfog = {"r_skyfog", "1"};
 
 cvar_t	gl_finish = {"gl_finish","0"};
@@ -126,16 +124,6 @@ cvar_t	r_farclip	        = {"r_farclip",              "4096"};        //far clip
 
 cvar_t	r_flatlightstyles = {"r_flatlightstyles", "0", qfalse};
 
-//johnfitz -- struct for passing lerp information to drawing functions
-typedef struct {
-	short pose1;
-	short pose2;
-	float blend;
-	vec3_t origin;
-	vec3_t angles;
-} lerpdata_t;
-//johnfitz
-
 extern	cvar_t	gl_ztrick;
 extern 	cvar_t 	scr_fov_viewmodel;
 
@@ -168,6 +156,126 @@ void R_RotateForEntity (entity_t *e, unsigned char scale)
 	if (scale != ENTSCALE_DEFAULT && scale != 0) {
 		float scalefactor = ENTSCALE_DECODE(scale);
 		glScalef(scalefactor, scalefactor, scalefactor);
+	}
+}
+
+void IgnoreInterpolatioFrame (entity_t *e, aliashdr_t *paliashdr)
+{
+	if (strcmp(e->old_model, e->model->name) && e->model != NULL)
+	{
+		strcpy(e->old_model, e->model->name);
+        // fenix@io.com: model transform interpolation
+        e->frame_start_time     = 0;
+        e->translate_start_time = 0;
+        e->rotate_start_time    = 0;
+        e->pose1    = 0;
+        e->pose2    = paliashdr->frames[e->frame].firstpose;
+	}
+}
+
+
+/*
+=============
+R_InterpolateEntity
+
+was R_BlendedRotateForEntity
+fenix@io.com: model transform interpolation
+
+modified by blubswillrule
+//fixme (come back and fix this once we can test on psp and view the true issue with interpolation)
+=============
+*/
+
+void R_InterpolateEntity(entity_t *e, int shadow)	// Tomaz - New Shadow
+{
+	float timepassed;
+	float blend;
+	vec3_t deltaVec;
+	int i;
+	
+	// positional interpolation
+	
+	timepassed = realtime - e->translate_start_time;
+	
+	//notes to self (blubs)
+	//-Added this method, and commented out the check for r_i_model_transforms.value
+	//tried the snapping interpolation, though it worked, it was still a bit jittery...
+	//problem with linear interpolation is we don't know the exact time it should take to move from origin1 to origin2...
+	//looks like the rotation interpolation doesn't work all that great either, rotation could benefit from the snapping interpolation that I use
+	//if I get this method to work well, make sure we go back and check for r_i_model_transforms again, (because vmodel and other models that don't use interpolation)
+	//probably go back and edit animations too as I redo the last 2 textures..
+	
+	if (e->translate_start_time == 0 || timepassed > 1)
+	{
+		e->translate_start_time = realtime;
+		VectorCopy (e->origin, e->origin1);
+		VectorCopy (e->origin, e->origin2);
+	}
+	
+	//our origin has been updated
+	if (!VectorCompare (e->origin, e->origin2))
+	{
+		e->translate_start_time = realtime;
+		VectorCopy (e->origin2, e->origin1);
+		VectorCopy (e->origin,  e->origin2);
+		blend = 0;
+	}
+	else
+	{
+		blend =  timepassed / 0.4;//0.1 not sure what this value should be...
+		//technically this value should be the total amount of time that we take from 1 position to the next, it's practically how long it should take us to go from one location to the next...
+		if (cl.paused || blend > 1)
+			blend = 0;
+	}
+	
+	VectorSubtract (e->origin2, e->origin1, deltaVec);
+
+	glTranslatef (e->origin[0] + (blend * deltaVec[0]),  e->origin[1] + (blend * deltaVec[1]),  e->origin[2] + (blend * deltaVec[2]));
+
+	// orientation interpolation (Euler angles, yuck!)
+	timepassed = realtime - e->rotate_start_time;
+	
+	if (e->rotate_start_time == 0 || timepassed > 1)
+	{
+		e->rotate_start_time = realtime;
+		VectorCopy (e->angles, e->angles1);
+		VectorCopy (e->angles, e->angles2);
+	}
+	
+	if (!VectorCompare (e->angles, e->angles2))
+	{
+		e->rotate_start_time = realtime;
+		VectorCopy (e->angles2, e->angles1);
+		VectorCopy (e->angles,  e->angles2);
+		blend = 0;
+	}
+	else
+	{
+		blend = timepassed / 0.1;
+		if (cl.paused || blend > 1)
+			blend = 1;
+	}
+	
+	VectorSubtract (e->angles2, e->angles1, deltaVec);
+	
+	// always interpolate along the shortest path
+	for (i = 0; i < 3; i++)
+	{
+		if (deltaVec[i] > 180)
+		{
+			deltaVec[i] -= 360;
+		}
+		else if (deltaVec[i] < -180)
+		{
+		    deltaVec[i] += 360;
+		}
+	}
+
+	glRotatef ((e->angles1[YAW] + ( blend * deltaVec[YAW])) * (M_PI / 180.0f),  0, 0, 1);
+	if (shadow == 0)
+	{
+		glRotatef ((-e->angles1[PITCH] + (-blend * deltaVec[PITCH])) * (M_PI / 180.0f),  0, 1, 0);
+    	glRotatef ((e->angles1[ROLL] + ( blend * deltaVec[ROLL])) * (M_PI / 180.0f),  1, 0, 0);
 	}
 }
 
@@ -361,34 +469,84 @@ int	lastposenum;
 GL_DrawAliasFrame -- johnfitz -- rewritten to support colored light, lerping, entalpha, multitexture, and r_drawflat
 =============
 */
-void GL_DrawAliasFrame (aliashdr_t *paliashdr, lerpdata_t lerpdata)
+void GL_DrawAliasFrame (aliashdr_t *paliashdr, int posenum)
 {
 	float	vertcolor[4];
-	trivertx_t *verts1, *verts2;
+	trivertx_t *verts;
 	int		*commands;
 	int		count;
 	float	u,v;
-	float	blend, iblend;
-	qboolean lerping;
 
-	if (lerpdata.pose1 != lerpdata.pose2)
+	verts = (trivertx_t *)((byte *)paliashdr + paliashdr->posedata);
+	verts += posenum * paliashdr->poseverts;
+	commands = (int *)((byte *)paliashdr + paliashdr->commands);
+
+	glColor4f(lightcolor[0]/255, lightcolor[1]/255, lightcolor[2]/255, 1.0f);
+
+	while (1)
 	{
-		lerping = true;
-		verts1  = (trivertx_t *)((byte *)paliashdr + paliashdr->posedata);
-		verts2  = verts1;
-		verts1 += lerpdata.pose1 * paliashdr->poseverts;
-		verts2 += lerpdata.pose2 * paliashdr->poseverts;
-		blend = lerpdata.blend;
-		iblend = 1.0f - blend;
+		// get the vertex count and primitive type
+		count = *commands++;
+		if (!count)
+			break;		// done
+
+		if (count < 0)
+		{
+			count = -count;
+			glBegin (GL_TRIANGLE_FAN);
+		}
+		else
+			glBegin (GL_TRIANGLE_STRIP);
+
+		do
+		{
+			u = ((float *)commands)[0];
+			v = ((float *)commands)[1];
+
+			glTexCoord2f (u, v);
+
+			commands += 2;
+
+			glVertex3f (verts->v[0], verts->v[1], verts->v[2]);
+			verts++;
+		} while (--count);
+
+		glEnd ();
 	}
-	else // poses the same means either 1. the entity has paused its animation, or 2. r_lerpmodels is disabled
-	{
-		lerping = false;
-		verts1  = (trivertx_t *)((byte *)paliashdr + paliashdr->posedata);
-		verts2  = verts1; // avoid bogus compiler warning
-		verts1 += lerpdata.pose1 * paliashdr->poseverts;
-		blend = iblend = 0; // avoid bogus compiler warning
-	}
+}
+
+
+/*
+=============
+GL_DrawAliasBlendedFrame
+
+fenix@io.com: model animation interpolation
+=============
+*/
+// fenix@io.com: model animation interpolation
+int lastposenum0;
+void GL_DrawAliasBlendedFrame (aliashdr_t *paliashdr, int pose1, int pose2, float blend)
+{
+	// if (r_showtris.value)
+	// {
+	// 	GL_DrawAliasBlendedWireFrame(paliashdr, pose1, pose2, blend);
+	// 	return;
+	// }
+	trivertx_t* verts1;
+	trivertx_t* verts2;
+	vec3_t	  d;
+	int		*commands;
+	int		count;
+	float	u,v;
+
+	lastposenum0 = pose1;
+	lastposenum  = pose2;
+
+	verts1 = (trivertx_t *)((byte *)paliashdr + paliashdr->posedata);
+	verts2 = verts1;
+
+	verts1 += pose1 * paliashdr->poseverts;
+	verts2 += pose2 * paliashdr->poseverts;
 
 	commands = (int *)((byte *)paliashdr + paliashdr->commands);
 
@@ -418,22 +576,15 @@ void GL_DrawAliasFrame (aliashdr_t *paliashdr, lerpdata_t lerpdata)
 
 			commands += 2;
 
-			if (lerping) {
-				glVertex3f (verts1->v[0]*iblend + verts2->v[0]*blend,
-							verts1->v[1]*iblend + verts2->v[1]*blend,
-							verts1->v[2]*iblend + verts2->v[2]*blend);
-				verts1++;
-				verts2++;
-			} else {
-				glVertex3f (verts1->v[0], verts1->v[1], verts1->v[2]);
-				verts1++;
-			}
+			VectorSubtract(verts2->v, verts1->v, d);
+			glVertex3f (verts1->v[0] + (blend * d[0]), verts1->v[1] + (blend * d[1]), verts1->v[2] + (blend * d[2]));
+			verts1++;
+			verts2++;
 		} while (--count);
 
 		glEnd ();
 	}
 }
-
 
 /*
 =============
@@ -506,17 +657,50 @@ void GL_DrawAliasShadow (aliashdr_t *paliashdr, int posenum)
 
 /*
 =================
-R_SetupAliasFrame -- johnfitz -- rewritten to support lerping
+R_SetupAliasFrame
 =================
 */
-void R_SetupAliasFrame (aliashdr_t *paliashdr, int frame, lerpdata_t *lerpdata)
+void R_SetupAliasFrame (int frame, aliashdr_t *paliashdr)
 {
-	entity_t		*e = currententity;
-	int				posenum, numposes;
+	int				pose, numposes;
+	float			interval;
 
 	if ((frame >= paliashdr->numframes) || (frame < 0))
 	{
-		Con_DPrintf ("R_AliasSetupFrame: no such frame %d for '%s'\n", frame, e->model->name);
+		Con_DPrintf ("R_AliasSetupFrame: no such frame %d\n", frame);
+		frame = 0;
+	}
+
+	pose = paliashdr->frames[frame].firstpose;
+	numposes = paliashdr->frames[frame].numposes;
+
+	if (numposes > 1)
+	{
+		interval = paliashdr->frames[frame].interval;
+		pose += (int)(cl.time / interval) % numposes;
+	}
+	
+	GL_DrawAliasFrame(paliashdr, pose);
+}
+
+/*
+=================
+R_SetupAliasBlendedFrame
+
+fenix@io.com: model animation interpolation
+=================
+*/
+//double t1, t2, t3;
+
+void R_SetupAliasBlendedFrame (int frame, aliashdr_t *paliashdr, entity_t* e)
+{
+	int   pose;
+	int   numposes;
+	float blend;
+
+	if ((frame >= paliashdr->numframes) || (frame < 0))
+	{
+		Con_DPrintf ("R_AliasSetupFrame: no such frame %d\n", frame);
 		frame = 0;
 	}
 
@@ -527,127 +711,48 @@ void R_SetupAliasFrame (aliashdr_t *paliashdr, int frame, lerpdata_t *lerpdata)
 	int distance_from_client = (int)((dist_x) * (dist_x) + (dist_y) * (dist_y)); // no use sqrting, just slows us down.
 
 	// They're too far away from us to care about blending their frames.
-	// cypress -- added an additional check not to lerp if there's only 1 frame
-	if (distance_from_client >= 40000 || paliashdr->numframes <= 1) { // 200 * 200
+	if (distance_from_client >= 160000) { // 400 * 400
 		// Fix them from jumping from last lerp
-		lerpdata->pose1 = lerpdata->pose2 = paliashdr->frames[frame].firstpose;
+		e->pose1 = e->pose2 = paliashdr->frames[frame].firstpose;
+		e->frame_interval = 0.1;
 
-		e->lerptime = 0.1;
-		lerpdata->blend = 1;
+		GL_DrawAliasFrame (paliashdr, paliashdr->frames[frame].firstpose);
 	} else {
-		posenum = paliashdr->frames[frame].firstpose;
+		pose = paliashdr->frames[frame].firstpose;
 		numposes = paliashdr->frames[frame].numposes;
 
 		if (numposes > 1)
 		{
-			e->lerptime = paliashdr->frames[frame].interval;
-			posenum += (int)(cl.time / e->lerptime) % numposes;
+			e->frame_interval = paliashdr->frames[frame].interval;
+			pose += (int)(cl.time / e->frame_interval) % numposes;
 		}
 		else
-			e->lerptime = 0.1;
-
-		if (e->lerpflags & LERP_RESETANIM) //kill any lerp in progress
 		{
-			e->lerpstart = 0;
-			e->previouspose = posenum;
-			e->currentpose = posenum;
-			e->lerpflags -= LERP_RESETANIM;
-		}
-		else if (e->currentpose != posenum) // pose changed, start new lerp
-		{
-			if (e->lerpflags & LERP_RESETANIM2) //defer lerping one more time
-			{
-				e->lerpstart = 0;
-				e->previouspose = posenum;
-				e->currentpose = posenum;
-				e->lerpflags -= LERP_RESETANIM2;
-			}
-			else
-			{
-				e->lerpstart = cl.time;
-				e->previouspose = e->currentpose;
-				e->currentpose = posenum;
-			}
+			/* One tenth of a second is a good for most Quake animations.
+			If the nextthink is longer then the animation is usually meant to pause
+			(e.g. check out the shambler magic animation in shambler.qc).  If its
+			shorter then things will still be smoothed partly, and the jumps will be
+			less noticable because of the shorter time.  So, this is probably a good
+			assumption. */
+			e->frame_interval = 0.1;
 		}
 
-		//set up values
-		if (r_lerpmodels.value && !(e->model->flags & MOD_NOLERP && r_lerpmodels.value != 2))
+		if (e->pose2 != pose)
 		{
-			if (e->lerpflags & LERP_FINISH && numposes == 1)
-				lerpdata->blend = CLAMP (0, (cl.time - e->lerpstart) / (e->lerpfinish - e->lerpstart), 1);
-			else
-				lerpdata->blend = CLAMP (0, (cl.time - e->lerpstart) / e->lerptime, 1);
-			lerpdata->pose1 = e->previouspose;
-			lerpdata->pose2 = e->currentpose;
+			e->frame_start_time = realtime;
+			e->pose1 = e->pose2;
+			e->pose2 = pose;
+			blend = 0;
 		}
-		else //don't lerp
-		{
-			lerpdata->blend = 1;
-			lerpdata->pose1 = posenum;
-			lerpdata->pose2 = posenum;
-		}
-	}
-}
-
-/*
-=================
-R_SetupEntityTransform -- johnfitz -- set up transform part of lerpdata
-=================
-*/
-void R_SetupEntityTransform (entity_t *e, lerpdata_t *lerpdata)
-{
-	float blend;
-	vec3_t d;
-	int i;
-
-	// if LERP_RESETMOVE, kill any lerps in progress
-	if (e->lerpflags & LERP_RESETMOVE)
-	{
-		e->movelerpstart = 0;
-		VectorCopy (e->origin, e->previousorigin);
-		VectorCopy (e->origin, e->currentorigin);
-		VectorCopy (e->angles, e->previousangles);
-		VectorCopy (e->angles, e->currentangles);
-		e->lerpflags -= LERP_RESETMOVE;
-	}
-	else if (!VectorCompare (e->origin, e->currentorigin) || !VectorCompare (e->angles, e->currentangles)) // origin/angles changed, start new lerp
-	{
-		e->movelerpstart = cl.time;
-		VectorCopy (e->currentorigin, e->previousorigin);
-		VectorCopy (e->origin,  e->currentorigin);
-		VectorCopy (e->currentangles, e->previousangles);
-		VectorCopy (e->angles,  e->currentangles);
-	}
-
-	//set up values
-	if (r_lerpmove.value && e != &cl.viewent && e->lerpflags & LERP_MOVESTEP)
-	{
-		if (e->lerpflags & LERP_FINISH)
-			blend = CLAMP (0, (cl.time - e->movelerpstart) / (e->lerpfinish - e->movelerpstart), 1);
 		else
-			blend = CLAMP (0, (cl.time - e->movelerpstart) / 0.1, 1);
+			blend = (realtime - e->frame_start_time) / e->frame_interval;
+		// wierd things start happening if blend passes 1
+		if (cl.paused || blend > 1) blend = 1;
 
-		//translation
-		VectorSubtract (e->currentorigin, e->previousorigin, d);
-		lerpdata->origin[0] = e->previousorigin[0] + d[0] * blend;
-		lerpdata->origin[1] = e->previousorigin[1] + d[1] * blend;
-		lerpdata->origin[2] = e->previousorigin[2] + d[2] * blend;
-
-		//rotation
-		VectorSubtract (e->currentangles, e->previousangles, d);
-		for (i = 0; i < 3; i++)
-		{
-			if (d[i] > 180)  d[i] -= 360;
-			if (d[i] < -180) d[i] += 360;
-		}
-		lerpdata->angles[0] = e->previousangles[0] + d[0] * blend;
-		lerpdata->angles[1] = e->previousangles[1] + d[1] * blend;
-		lerpdata->angles[2] = e->previousangles[2] + d[2] * blend;
-	}
-	else //don't lerp
-	{
-		VectorCopy (e->origin, lerpdata->origin);
-		VectorCopy (e->angles, lerpdata->angles);
+		if (blend == 1)
+			GL_DrawAliasFrame (paliashdr, pose);
+		else
+			GL_DrawAliasBlendedFrame (paliashdr, e->pose1, e->pose2, blend);
 	}
 }
 
@@ -665,7 +770,6 @@ void R_DrawZombieLimb (entity_t *e, int which)
 	model_t		*clmodel;
 	aliashdr_t	*paliashdr;
 	entity_t 	*limb_ent;
-	lerpdata_t	lerpdata;
 
 	switch(which) {
 		case 1:
@@ -716,9 +820,8 @@ void R_DrawZombieLimb (entity_t *e, int which)
 	if (gl_affinemodels.value)
 		glHint (GL_PERSPECTIVE_CORRECTION_HINT, GL_FASTEST);
 
-	R_SetupAliasFrame (paliashdr, e->frame, &lerpdata);
-	R_SetupEntityTransform (e, &lerpdata);
-	GL_DrawAliasFrame(paliashdr, lerpdata);
+	IgnoreInterpolatioFrame(e, paliashdr);
+	R_SetupAliasBlendedFrame (currententity->frame, paliashdr, e);
 
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
 
@@ -748,7 +851,6 @@ void R_DrawTransparentAliasModel (entity_t *e)
 	int			index;
 	float		s, t, an;
 	int			anim;
-	lerpdata_t	lerpdata;
 
 	clmodel = currententity->model;
 
@@ -841,9 +943,8 @@ void R_DrawTransparentAliasModel (entity_t *e)
 	if (gl_affinemodels.value)
 		glHint (GL_PERSPECTIVE_CORRECTION_HINT, GL_FASTEST);
 
-	R_SetupAliasFrame (paliashdr, e->frame, &lerpdata);
-	R_SetupEntityTransform (e, &lerpdata);
-	GL_DrawAliasFrame(paliashdr, lerpdata);
+	IgnoreInterpolatioFrame(e, paliashdr);
+	R_SetupAliasBlendedFrame (currententity->frame, paliashdr, e);
 
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
 	glDepthMask(GL_TRUE);
@@ -892,7 +993,6 @@ void R_DrawAliasModel (entity_t *e)
 	int			index;
 	float		s, t, an;
 	int			anim;
-	lerpdata_t	lerpdata;
 
 	clmodel = currententity->model;
 
@@ -1080,9 +1180,8 @@ void R_DrawAliasModel (entity_t *e)
 	if (gl_affinemodels.value)
 		glHint (GL_PERSPECTIVE_CORRECTION_HINT, GL_FASTEST);
 
-	R_SetupAliasFrame (paliashdr, e->frame, &lerpdata);
-	R_SetupEntityTransform (e, &lerpdata);
-	GL_DrawAliasFrame(paliashdr, lerpdata);
+	IgnoreInterpolatioFrame(e, paliashdr);
+	R_SetupAliasBlendedFrame (currententity->frame, paliashdr, e);
 
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
 

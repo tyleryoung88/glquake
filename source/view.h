@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 See the GNU General Public License for more details.
 
@@ -26,8 +26,10 @@ extern	byte		ramps[3][256];
 extern float v_blend[4];
 
 extern cvar_t lcd_x;
-extern vec3_t CWeaponRot;
+
+
 extern vec3_t CWeaponOffset;//blubs declared this
+extern vec3_t CWeaponRot;
 
 void V_Init (void);
 void V_RenderView (void);

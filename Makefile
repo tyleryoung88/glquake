@@ -120,7 +120,8 @@ COMMON_OBJS =	chase.c \
 				gl_warp.c \
 				gl_vidctr.c \
 				r_part.c \
-				touch_ctr.c
+				touch_ctr.c \
+				crypter.c
 
 CFILES		:=	$(COMMON_OBJS)
 CPPFILES	:=	

@@ -866,7 +866,7 @@ void Draw_FillByColor (int x, int y, int w, int h, int r, int g, int b, int a)
 	glDisable (GL_TEXTURE_2D);
 	glEnable (GL_BLEND); //johnfitz -- for alpha
 	glDisable (GL_ALPHA_TEST); //johnfitz -- for alpha
-	glColor4f (r/255, g/255, b/255, a/255);
+	glColor4f ((float)(r/255.0f), (float)(g/255.0f), (float)(b/255.0f), (float)(a/255.0f));
 
 	glBegin (GL_QUADS);
 

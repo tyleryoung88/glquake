@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 See the GNU General Public License for more details.
 
@@ -55,6 +55,7 @@ kbutton_t	in_up, in_down;
 int			in_impulse;
 
 
+
 void KeyDown (kbutton_t *b)
 {
 	int		k;
@@ -68,7 +69,7 @@ void KeyDown (kbutton_t *b)
 
 	if (k == b->down[0] || k == b->down[1])
 		return;		// repeating key
-	
+
 	if (!b->down[0])
 		b->down[0] = k;
 	else if (!b->down[1])
@@ -78,7 +79,7 @@ void KeyDown (kbutton_t *b)
 		Con_Printf ("Three keys down for a button!\n");
 		return;
 	}
-	
+
 	if (b->state & 1)
 		return;		// still down
 	b->state |= 1 + 2;	// down + impulse down
@@ -88,7 +89,7 @@ void KeyUp (kbutton_t *b)
 {
 	int		k;
 	char	*c;
-	
+
 	c = Cmd_Argv(1);
 	if (c[0])
 		k = atoi(c);
@@ -118,14 +119,14 @@ qboolean croshhairmoving = false;
 
 void IN_KLookDown (void) {KeyDown(&in_klook);}
 void IN_KLookUp (void) {KeyUp(&in_klook);}
-/*
-void IN_MLookDown (void) {KeyDown(&in_mlook);}
-void IN_MLookUp (void) {
+
+/*void IN_MLookDown (void) {KeyDown(&in_mlook);}
+void IN_MLookUp (void){
 KeyUp(&in_mlook);
 if ( !(in_mlook.state&1) &&  lookspring.value)
 	V_StartPitchDrift();
-}
-*/
+} Heffo - mlook cvar*/
+
 void IN_UpDown(void) {KeyDown(&in_up);}
 void IN_UpUp(void) {KeyUp(&in_up);}
 void IN_DownDown(void) {KeyDown(&in_down);}
@@ -135,7 +136,11 @@ void IN_LeftUp(void) {KeyUp(&in_left);}
 void IN_RightDown(void) {KeyDown(&in_right);}
 void IN_RightUp(void) {KeyUp(&in_right);}
 void IN_ForwardDown(void) {KeyDown(&in_forward);}
-void IN_ForwardUp(void) {KeyUp(&in_forward);}
+void IN_ForwardUp(void) {KeyUp(&in_forward);
+#ifdef __PSP__
+	Cbuf_AddText("impulse 24\n");
+#endif // __PSP__
+}
 void IN_BackDown(void) {KeyDown(&in_back);}
 void IN_BackUp(void) {KeyUp(&in_back);}
 void IN_LookupDown(void) {KeyDown(&in_lookup);}
@@ -186,13 +191,13 @@ float CL_KeyState (kbutton_t *key)
 {
 	float		val;
 	qboolean	impulsedown, impulseup, down;
-	
+
 	impulsedown = key->state & 2;
 	impulseup = key->state & 4;
 	down = key->state & 1;
 	val = 0;
-	
-	if (impulsedown && !impulseup) 
+
+	if (impulsedown && !impulseup)
 	{
 		if (down)
 			val = 0.5;	// pressed and held this frame
@@ -222,7 +227,7 @@ float CL_KeyState (kbutton_t *key)
 	}
 
 	key->state &= 1;		// clear impulses
-	
+
 	return val;
 }
 
@@ -246,6 +251,7 @@ cvar_t	cl_anglespeedkey = {"cl_anglespeedkey","1.5"};
 cvar_t	in_mlook = {"in_mlook", "1", true}; //Heffo - mlook cvar
 cvar_t	in_aimassist = {"in_aimassist", "1", true};
 
+
 //Shpuld - Porting over lower sens for lower fov
 extern cvar_t scr_fov;
 
@@ -256,6 +262,8 @@ CL_AdjustAngles
 Moves the local angle positions
 ================
 */
+
+
 extern int original_fov, final_fov;
 void CL_AdjustAngles (void)
 {
@@ -272,11 +280,28 @@ void CL_AdjustAngles (void)
 	//speed = speed*final_fov/original_fov;
 	//shpuld end
 
+	// ==== Aim Assist + ====
+	// cut look speed in half when facing enemy, unless
+	// mag is empty
+	if ((in_aimassist.value) && (sv_player->v.facingenemy == 1) && cl.stats[STAT_CURRENTMAG] > 0) {
+		speed *= 0.5;
+	}
+	// additionally, slice look speed when ADS/scopes
+	if (cl.stats[STAT_ZOOM] == 1)
+		speed *= 0.5;
+	else if (cl.stats[STAT_ZOOM] == 2)
+		speed *= 0.25;
+
 
 	if (!(in_strafe.state & 1))
 	{
-		cl.viewangles[YAW] -= speed*cl_yawspeed.value*CL_KeyState (&in_right);
-		cl.viewangles[YAW] += speed*cl_yawspeed.value*CL_KeyState (&in_left);
+#ifdef __PSP__
+		cl.viewangles[YAW] -= speed*cl_yawspeed.value*CL_KeyState (&in_right) * in_sensitivity.value;
+		cl.viewangles[YAW] += speed*cl_yawspeed.value*CL_KeyState (&in_left) * in_sensitivity.value;
+#else
+		cl.viewangles[YAW] -= speed*cl_yawspeed.value*CL_KeyState (&in_right) * sensitivity.value;
+		cl.viewangles[YAW] += speed*cl_yawspeed.value*CL_KeyState (&in_left) * sensitivity.value;
+#endif // __PSP__
 		cl.viewangles[YAW] = anglemod(cl.viewangles[YAW]);
 	}
 	if (in_klook.state & 1)
@@ -286,8 +311,13 @@ void CL_AdjustAngles (void)
 		cl.viewangles[PITCH] += speed*cl_pitchspeed.value * CL_KeyState (&in_back);
 	}
 
-	up = CL_KeyState (&in_lookup);
-	down = CL_KeyState(&in_lookdown);
+#ifdef __PSP__
+	up = CL_KeyState (&in_lookup) * in_sensitivity.value;
+	down = CL_KeyState(&in_lookdown) * in_sensitivity.value;
+#else
+	up = CL_KeyState (&in_lookup) * sensitivity.value;
+	down = CL_KeyState(&in_lookdown) * sensitivity.value;
+#endif // __PSP__
 
 	cl.viewangles[PITCH] -= speed*cl_pitchspeed.value * up;
 	cl.viewangles[PITCH] += speed*cl_pitchspeed.value * down;
@@ -314,18 +344,22 @@ CL_BaseMove
 Send the intended movement message to the server
 ================
 */
+
 extern cvar_t waypoint_mode;
+qboolean in_game;
 float crosshair_opacity;
 void CL_BaseMove (usercmd_t *cmd)
-{	
+{
 	if (cls.signon != SIGNONS)//BLUBS CHANGED HERE
 		return;
+
+	in_game = true;
 
 	CL_AdjustAngles ();
 
 	Q_memset (cmd, 0, sizeof(*cmd));
 
-	// Moto - we handle movespeed in QC now.
+	// cypress - we handle movespeed in QC now.
 	cl_backspeed = cl_forwardspeed = cl_sidespeed = sv_player->v.maxspeed;
 
 	// Throttle side and back speeds
@@ -471,9 +505,9 @@ void CL_Aim_Snap(void)
 			}
 		}
 		if (cl.perks & 64)
-		  	znum = EN_Find(znum,"ai_zombie_head");
-    	else
-      		znum = EN_Find(znum,"ai_zombie");
+			znum = EN_Find(znum,"ai_zombie_head");
+		else
+			znum = EN_Find(znum,"ai_zombie");
 		z = EDICT_NUM(znum);
 	}
 
@@ -507,14 +541,14 @@ float deltaPitch,deltaYaw;
 void CL_SendMove (usercmd_t *cmd)
 {
 	int		i;
-	int		bits;
+	long int		bits;
 	sizebuf_t	buf;
 	byte	data[128];
 	vec3_t tempv;
 	buf.maxsize = 128;
 	buf.cursize = 0;
 	buf.data = data;
-	
+
 	cl.cmd = *cmd;
 
 	//==== Aim Assist Code ====
@@ -522,13 +556,13 @@ void CL_SendMove (usercmd_t *cmd)
 	{
 		if(!zoom_snap)
 		{
+
 			CL_Aim_Snap();
 			zoom_snap = 1;
 		}
 	}
-	else {
+	else
 		zoom_snap = 0;
-	}
 
 	//==== Sniper Scope Swaying ====
 	if(cl.stats[STAT_ZOOM] == 2 && !(cl.perks & 64))
@@ -540,8 +574,13 @@ void CL_SendMove (usercmd_t *cmd)
 		vang[0] -= deltaPitch;
 		vang[1] -= deltaYaw;
 
+		#ifdef PSP_VFPU
+		deltaPitch =(vfpu_cosf(cl.time/0.7) + vfpu_cosf(cl.time) + vfpu_sinf(cl.time/1.1)) * 0.5;
+		deltaYaw = (vfpu_sinf(cl.time/0.4) + vfpu_cosf(cl.time/0.56) + vfpu_sinf(cl.time)) * 0.5;
+		#else
 		deltaPitch =(cos(cl.time/0.7) + cos(cl.time) + sin(cl.time/1.1)) * 0.5;
 		deltaYaw = (sin(cl.time/0.4) + cos(cl.time/0.56) + sin(cl.time)) * 0.5;
+		#endif
 
 		vang[0] += deltaPitch;
 		vang[1] += deltaYaw;
@@ -679,6 +718,8 @@ void CL_InitInput (void)
 	Cmd_AddCommand ("impulse", IN_Impulse);
 	Cmd_AddCommand ("+klook", IN_KLookDown);
 	Cmd_AddCommand ("-klook", IN_KLookUp);
+
+
 
 }
 

@@ -35,14 +35,6 @@ typedef struct efrag_s
 	struct efrag_s		*entnext;
 } efrag_t;
 
-//johnfitz -- for lerping
-#define LERP_MOVESTEP	(1<<0) //this is a MOVETYPE_STEP entity, enable movement lerp
-#define LERP_RESETANIM	(1<<1) //disable anim lerping until next anim frame
-#define LERP_RESETANIM2	(1<<2) //set this and previous flag to disable anim lerping for two anim frames
-#define LERP_RESETMOVE	(1<<3) //disable movement lerping until next origin/angles change
-#define LERP_FINISH		(1<<4) //use lerpfinish time from server update instead of assuming interval of 0.1
-//johnfitz
-
 typedef struct entity_s
 {
 	qboolean				forcelink;		// model changed
@@ -65,6 +57,7 @@ typedef struct entity_s
 
 	unsigned char 			scale;
 	struct model_s			*model;			// NULL = no model
+	char					old_model[128];			// NULL = no model
 	struct efrag_s			*efrag;			// linked list of efrags
 	int						frame;
 	float					syncbase;		// for client-side animations
@@ -73,6 +66,15 @@ typedef struct entity_s
 	int						skinnum;		// for Alias models
 	int						visframe;		// last frame this entity was
 											//  found in an active leaf
+
+	// fenix@io.com: model transform interpolation
+    float                   translate_start_time;
+    vec3_t                  origin1;
+    vec3_t                  origin2;
+
+    float                   rotate_start_time;
+    vec3_t                  angles1;
+    vec3_t                  angles2;
 											
 	int						dlightframe;	// dynamic lighting
 	int						dlightbits;
@@ -83,18 +85,10 @@ typedef struct entity_s
 											//  that splits bmodel, or NULL if
 											//  not split
 
-	byte					lerpflags;		//johnfitz -- lerping
-	float					lerpstart;		//johnfitz -- animation lerping
-	float					lerptime;		//johnfitz -- animation lerping
-	float					lerpfinish;		//johnfitz -- lerping -- server sent us a more accurate interval, use it instead of 0.1
-	short					previouspose;	//johnfitz -- animation lerping
-	short					currentpose;	//johnfitz -- animation lerping
-//	short					futurepose;		//johnfitz -- animation lerping
-	float					movelerpstart;	//johnfitz -- transform lerping
-	vec3_t					previousorigin;	//johnfitz -- transform lerping
-	vec3_t					currentorigin;	//johnfitz -- transform lerping
-	vec3_t					previousangles;	//johnfitz -- transform lerping
-	vec3_t					currentangles;	//johnfitz -- transform lerping
+	float                   frame_start_time;
+    float                   frame_interval;
+    int                     pose1;
+    int                     pose2;
 
 	int		modelindex;
 
