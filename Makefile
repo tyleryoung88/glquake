@@ -61,35 +61,35 @@ export VPATH	:=	$(foreach dir,$(SOURCES),$(CURDIR)/$(dir))
 export DEPSDIR	:=	$(CURDIR)/$(BUILD)
 
 COMMON_OBJS =	chase.c \
-                                cl_hud.c \
+                cl_hud.c \
 				cl_demo.c \
 				cl_input.c \
 				cl_main.c \
 				cl_parse.c \
 				cl_tent.c \
 				cl_slist.c \
-				bsp_strlcpy.c \
+				ctr/bsp_strlcpy.c \
 				cmd.c \
-				common.c \
+				ctr/common.c \
 				console.c \
 				crc.c \
 				cvar.c \
 				host.c \
 				host_cmd.c \
-				keys.c \
+				ctr/keys.c \
 				mathlib.c \
 				matrixlib.c \
-				menu.c \
-				net_dgrm.c \
-				net_udpctr.c \
+				ctr/menu.c \
+				ctr/net_dgrm.c \
+				ctr/net_udpctr.c \
 				net_loop.c \
-				net_bsd.c \
-				net_main.c \
+				ctr/net_bsd.c \
+				ctr/net_main.c \
 				net_vcr.c \
 				pr_cmds.c \
 				pr_edict.c \
 				pr_exec.c \
-				sbar.c \
+				ctr/sbar.c \
 				sv_main.c \
 				sv_move.c \
 				sv_phys.c \
@@ -98,29 +98,29 @@ COMMON_OBJS =	chase.c \
 				wad.c \
 				world.c \
 				zone.c \
-				sys_ctr.c \
+				ctr/sys_ctr.c \
 				snd_dma.c \
 				snd_mix.c \
 				snd_mem.c \
-				snd_ctr.c \
-				in_ctr.c \
-				cd_null.c \
-				gl_qmb.c \
-				gl_decal.c \
-				gl_draw.c \
-		                gl_fog.c \
-				gl_mesh.c \
-				gl_model.c \
-				gl_refrag.c \
-				gl_rlight.c \
-				gl_rmain.c \
-				gl_rmisc.c \
-				gl_rsurf.c \
-				gl_screen.c \
-				gl_warp.c \
-				gl_vidctr.c \
-				r_part.c \
-				touch_ctr.c \
+				ctr/snd_ctr.c \
+				ctr/in_ctr.c \
+				ctr/cd_null.c \
+				ctr/gl/gl_qmb.c \
+				ctr/gl/gl_decal.c \
+				ctr/gl/gl_draw.c \
+		    	ctr/gl/gl_fog.c \
+				ctr/gl/gl_mesh.c \
+				ctr/gl/gl_model.c \
+				ctr/gl/gl_refrag.c \
+				ctr/gl/gl_rlight.c \
+				ctr/gl/gl_rmain.c \
+				ctr/gl/gl_rmisc.c \
+				ctr/gl/gl_rsurf.c \
+				ctr/gl/gl_screen.c \
+				ctr/gl/gl_warp.c \
+				ctr/gl/gl_vidctr.c \
+				ctr/r_part.c \
+				ctr/touch_ctr.c \
 				crypter.c
 
 CFILES		:=	$(COMMON_OBJS)
@@ -187,6 +187,8 @@ all: $(BUILD)
 
 $(BUILD):
 	@[ -d $@ ] || mkdir -p $@
+	@mkdir -p $(BUILD)/ctr
+	@mkdir -p $(BUILD)/ctr/gl
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
 #---------------------------------------------------------------------------------
