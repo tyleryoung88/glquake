@@ -189,7 +189,7 @@ $(BUILD):
 	@[ -d $@ ] || mkdir -p $@
 	@mkdir -p $(BUILD)/ctr
 	@mkdir -p $(BUILD)/ctr/gl
-	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
+	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile.ctr
 	@mkdir -p $(BUILD)/3ds
 	@mkdir -p $(BUILD)/3ds/bin/
 	@mv $(BUILD)/*.o $(BUILD)/3ds/
