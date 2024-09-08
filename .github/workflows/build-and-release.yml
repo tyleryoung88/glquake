@@ -23,7 +23,7 @@ jobs:
       - name: Zip
         working-directory: ./
         run: |
-          zip -r ctr-nzp-3dsx.zip build/3ds/bin/nzportable.3dsx build/3ds/bin/nzportable.smdh
+          zip -r -j ctr-nzp-3dsx.zip build/3ds/bin/nzportable.3dsx build/3ds/bin/nzportable.smdh
       - name: Generate Build Date
         id: date
         run: echo "::set-output name=date::$(date +'%Y-%m-%d-%H-%M-%S')"
