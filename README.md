@@ -16,7 +16,7 @@ make install
 Now you can navigate to the root of the repository and build the `.3dsx`.
 
 ```bash
-make -f Makefile
+make -f Makefile.ctr
 ```
 
 We also provide prebuilt .3dsx files on the [Releases](https://github.com/nzp-team/glquake/releases/tag/bleeding-edge) page.

@@ -19,11 +19,11 @@ jobs:
       - name: Build
         working-directory: ./
         run: |
-          make -f Makefile
+          make -f Makefile.ctr
       - name: Zip
         working-directory: ./
         run: |
-          zip -r ctr-nzp-3dsx.zip nzportable.3dsx nzportable.smdh
+          zip -r ctr-nzp-3dsx.zip build/3ds/bin/nzportable.3dsx build/3ds/bin/nzportable.smdh
       - name: Generate Build Date
         id: date
         run: echo "::set-output name=date::$(date +'%Y-%m-%d-%H-%M-%S')"

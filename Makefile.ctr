@@ -14,12 +14,12 @@ BUILD		:=	build
 SOURCES		:=	source
 #DATA		:=	data
 INCLUDES	:=	include
-ICON		:= 	icon.png
+ICON		:= 	source/ctr/art/icon.png
 #ROMFS		:=	romfs 
 
 APP_AUTHOR 		:= NZ:P Team
 APP_TITLE 		:= Nazi Zombies: Portable
-APP_DESCRIPTION := Call of Duty Zombies remake, ctrQuake based.
+APP_DESCRIPTION := Call of Duty Zombies remake
 
 #---------------------------------------------------------------------------------
 # options for code generation
@@ -190,11 +190,19 @@ $(BUILD):
 	@mkdir -p $(BUILD)/ctr
 	@mkdir -p $(BUILD)/ctr/gl
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
+	@mkdir -p $(BUILD)/3ds
+	@mkdir -p $(BUILD)/3ds/bin/
+	@mv $(BUILD)/*.o $(BUILD)/3ds/
+	@mv $(BUILD)/*.d $(BUILD)/3ds/
+	@mv $(BUILD)/ctr $(BUILD)/3ds/
+	@mv $(BUILD)/$(TARGET).lst $(BUILD)/3ds/
+	@mv $(BUILD)/$(TARGET).map $(BUILD)/3ds/
+	@mv $(TARGET).* $(BUILD)/3ds/bin/
 
 #---------------------------------------------------------------------------------
 clean:
 	@echo clean ...
-	@rm -fr $(BUILD) $(TARGET).3dsx $(OUTPUT).smdh $(TARGET).elf
+	@rm -fr $(BUILD)
 
 
 #---------------------------------------------------------------------------------
