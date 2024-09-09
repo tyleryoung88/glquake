@@ -1,6 +1,6 @@
 # Nazi Zombies: Portable glQuake
 
-## The Nintendo 3DS engine has been unified with the PlayStation Portable engine to create [https://github.com/nzp-team/vril-engine](Vril). Please use this new repository instead.
+## The Nintendo 3DS engine has been unified with the PlayStation Portable engine to create [Vril](https://github.com/nzp-team/vril-engine). Please use this new repository instead.
 
 ## About
 This repository contains the 3DS engine for NZ:P, based on the glQuake port by masterfeizz. It contains optimizations from the NZ:P Team as well as NZ:P-specific feature implementation.
